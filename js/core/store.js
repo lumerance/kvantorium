@@ -47,6 +47,9 @@ export const DEFAULTS = {
     vacationDays: 14,
     history: [],                 // сохранённые расчёты отпускных
   },
+  // Группы дополнительного образования: набор ведёт сам педагог (У1, Д2 …),
+  // состав правится вручную, у каждого ребёнка два факта — договор и Навигатор.
+  enroll: { groups: [] },       // [{id, name, program, note, createdAt, students:[...]}]
   vedomostHeader: {},           // шапка итоговой ведомости
   vedomostGroups: [],           // группы, попадающие в ведомость
   vedomostMarks: {},            // ручные правки оценок: studentId -> {1,2,3,final}

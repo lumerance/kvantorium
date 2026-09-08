@@ -1,10 +1,33 @@
 // Разбор docx со списком обучающихся -> предметы -> группы -> ученики.
-import { readDocx, isMergedRow } from '../lib/docx.js';
+import { readDocx } from '../lib/docx.js';
 
 const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-const isGroupRow = (t) => /^группа\s*№?\s*\d+/i.test(norm(t));
+// «Группа 4», «Группа №4» и опечатка «Группы 5» — она реально встречается в списках.
+const isGroupRow = (t) => /^групп[аы]\s*№?\s*\d+/i.test(norm(t));
 const isSchoolRow = (t) => /наименование\s+школы/i.test(t);
-const isHeaderRow = (row) => /№\s*п\/?п/i.test(norm(row[0] || '')) || /^ФИО$/i.test(norm(row[2] || ''));
+const isHeaderRow = (row) => /№\s*п\/?п/i.test(norm(row[0] || '')) || row.some(c => /^ФИО$/i.test(norm(c)));
+const DATE_RE = /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\.?$/;
+const NUM_RE = /^\d{1,3}\.?$/;
+// ФИО: с заглавной, минимум два слова, без цифр — так отсекаются и заголовки
+// («Группа 4», «Промробо/Промдизайн (5 класс)»), и даты рождения.
+const looksLikeFio = (v) => !/\d/.test(v) && /^[А-ЯЁ][А-Яа-яЁё'’ʼ-]+(\s+[А-ЯЁ][А-Яа-яЁё.'’ʼ-]*){1,3}/.test(norm(v));
+
+/**
+ * Ячейки строки -> осмысленные значения. В реальных docx колонки разорваны
+ * служебными столбцами по 12 твипов и склеены gridSpan-ами: одно и то же
+ * значение приходит 2-3 раза подряд, а номер колонки «плывёт» от строки к
+ * строке (в одной группе ФИО лежит в 3-й ячейке, в следующей — уже в 4-й).
+ * Схлопываем повторы и пустоты, а поля дальше ищем по содержимому, не по индексу.
+ */
+function cellValues(row) {
+  const out = [];
+  for (const c of row) {
+    const v = norm(c);
+    if (!v || out[out.length - 1] === v) continue;
+    out.push(v);
+  }
+  return out;
+}
 
 function splitFio(fio) {
   const parts = norm(fio).split(' ').filter(Boolean);
@@ -25,67 +48,98 @@ const gradeOf = (title) => {
 let uid = 0;
 const nextId = (p) => `${p}${Date.now().toString(36)}${(uid++).toString(36)}`;
 
+/** Есть ли в строке ученик: ФИО + (необязательно) дата рождения. */
+function fioOf(vals) {
+  const birth = vals.find(v => DATE_RE.test(v)) || '';
+  const fio = vals.find(v => v !== birth && looksLikeFio(v));
+  return fio ? { fio, birth } : null;
+}
+
+function studentOf(vals) {
+  const f = fioOf(vals);
+  if (!f) return null;
+  const nums = vals.slice(0, vals.indexOf(f.fio)).filter(v => NUM_RE.test(v)).map(v => v.replace(/\.$/, ''));
+  const p = splitFio(f.fio);
+  return {
+    id: nextId('st_'),
+    no: nums[0] || '', noInGroup: nums[1] || '',
+    fio: p.full, last: p.last, first: p.first, middle: p.middle, short: p.short,
+    birth: f.birth.replace(/\.$/, ''),
+  };
+}
+
+/** Группа с таким номером могла начаться в предыдущей таблице (Word рвёт
+ *  длинные таблицы по страницам) — тогда продолжаем её, а не заводим дубль. */
+function ensureGroup(subject, label) {
+  const num = parseInt(/(\d+)/.exec(label)?.[1] || String(subject.groups.length + 1), 10);
+  const found = subject.groups.find(g => g.index === num);
+  if (found) return found;
+  const g = { id: nextId('grp_'), name: `Группа ${num}`, index: num, students: [] };
+  subject.groups.push(g);
+  return g;
+}
+
 /**
  * @returns {{subjects:Array<{id,title,grade,school,groups:Array<{id,name,index,students:Array}>}>, stats:object}}
  */
 export function parseStudentsDoc(docxData) {
   const subjects = [];
+  let subject = null;
+  let group = null;
+
   for (const table of docxData.tables) {
     const rows = table.rows;
     if (!rows.length) continue;
-    let title = isMergedRow(rows[0]) ? norm(rows[0][0]) : '';
-    if (!title) {
-      // заголовок мог оказаться в первой попавшейся объединённой строке
-      const r = rows.find(isMergedRow);
-      title = r ? norm(r[0]) : 'Без названия';
+
+    // Заголовок предмета — строка во всю ширину до первой группы/ученика.
+    // Если её нет, таблица является продолжением предыдущей (перенос на новую
+    // страницу) и вливается в тот же предмет и ту же группу.
+    let title = '';
+    for (const row of rows) {
+      const vals = cellValues(row);
+      if (!vals.length) continue;
+      if (isSchoolRow(vals[0]) || isHeaderRow(row)) continue;
+      if (isGroupRow(vals[0]) || fioOf(vals)) break;
+      if (vals.length === 1) { title = vals[0]; break; }
     }
-    if (isGroupRow(title) || isSchoolRow(title)) continue;
 
-    const subject = {
-      id: nextId('sub_'), title, grade: gradeOf(title), school: '',
-      groups: [],
-    };
-    let group = null;
+    if (title) {
+      subject = { id: nextId('sub_'), title, grade: gradeOf(title), school: '', groups: [] };
+      subjects.push(subject);
+      group = null;
+    }
+    if (!subject) {
+      subject = { id: nextId('sub_'), title: 'Без названия', grade: null, school: '', groups: [] };
+      subjects.push(subject);
+    }
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const first = norm(row[0]);
-      if (isMergedRow(row)) {
-        if (isSchoolRow(first)) { subject.school = norm(first.split(/:/).slice(1).join(':')) || first; continue; }
-        if (isGroupRow(first)) {
-          const num = parseInt(/(\d+)/.exec(first)[1], 10);
-          group = { id: nextId('grp_'), name: `Группа ${num}`, index: num, students: [] };
-          subject.groups.push(group);
-          continue;
-        }
-        continue; // прочие объединённые строки (заголовок)
+    for (const row of rows) {
+      const vals = cellValues(row);
+      if (!vals.length) continue;
+      if (isSchoolRow(vals[0])) {
+        if (!subject.school) subject.school = norm(vals[0].split(':').slice(1).join(':')) || vals[0];
+        continue;
       }
+      if (isGroupRow(vals[0])) { group = ensureGroup(subject, vals[0]); continue; }
       if (isHeaderRow(row)) continue;
-      const fio = norm(row[2]);
-      if (!fio || fio.length < 4 || !/[А-Яа-яЁё]/.test(fio)) continue;
-      if (!group) {
-        group = { id: nextId('grp_'), name: 'Группа 1', index: 1, students: [] };
-        subject.groups.push(group);
-      }
-      const p = splitFio(fio);
-      group.students.push({
-        id: nextId('st_'),
-        no: norm(row[0]).replace(/\.$/, ''),
-        noInGroup: norm(row[1]).replace(/\.$/, ''),
-        fio: p.full, last: p.last, first: p.first, middle: p.middle, short: p.short,
-        birth: norm(row[3]),
-      });
+      const student = studentOf(vals);
+      if (!student) continue;
+      if (!group) group = ensureGroup(subject, 'Группа 1');
+      // на разрыве страницы Word повторяет часть строк — не задваиваем ребёнка
+      if (group.students.some(x => x.fio === student.fio && x.birth === student.birth)) continue;
+      group.students.push(student);
     }
-    subject.groups = subject.groups.filter(g => g.students.length);
-    if (subject.groups.length) subjects.push(subject);
   }
 
+  for (const s of subjects) s.groups = s.groups.filter(g => g.students.length);
+  const withGroups = subjects.filter(s => s.groups.length);
+
   const stats = {
-    subjects: subjects.length,
-    groups: subjects.reduce((a, s) => a + s.groups.length, 0),
-    students: subjects.reduce((a, s) => a + s.groups.reduce((b, g) => b + g.students.length, 0), 0),
+    subjects: withGroups.length,
+    groups: withGroups.reduce((a, s) => a + s.groups.length, 0),
+    students: withGroups.reduce((a, s) => a + s.groups.reduce((b, g) => b + g.students.length, 0), 0),
   };
-  return { subjects, stats };
+  return { subjects: withGroups, stats };
 }
 
 export async function importStudentsFile(file) {

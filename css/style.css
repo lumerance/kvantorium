@@ -352,6 +352,19 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
   .payslip-print table.ps-foot td.r{text-align:left;padding-right:14pt}
   .payslip-print .ps-disclaimer{font-size:7pt;font-style:italic;color:#555;margin-top:8pt}
 
+  /* --- набор в группы ДО: список для распечатки и подписи --- */
+  .enroll-print{font-family:'Times New Roman',serif;color:#000}
+  .enroll-print h2{font-size:14pt;text-align:center;margin:0 0 10pt}
+  .enroll-print .e-group{page-break-inside:avoid;margin-bottom:14pt}
+  .enroll-print .e-group h3{font-size:12pt;margin:0 0 2pt;color:#000}
+  .enroll-print .e-sub{font-size:10pt;margin:0 0 6pt;color:#000}
+  .enroll-print table.e-table{width:100%;border-collapse:collapse}
+  .enroll-print table.e-table th,.enroll-print table.e-table td{
+    border:1px solid #000;padding:3pt 5pt;font-size:11pt;color:#000;background:none;white-space:normal;
+    text-transform:none;letter-spacing:0;position:static;font-weight:400;text-align:left}
+  .enroll-print table.e-table th{font-weight:700;text-align:center}
+  .enroll-print table.e-table td.c{text-align:center}
+
   @page{size:A4 portrait;margin:12mm}
 }
 
@@ -370,3 +383,23 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
   padding:2px 6px;border-radius:99px;transition:all .18s;
 }
 .pill-x:hover{color:var(--red);background:rgba(255,79,94,.15);text-shadow:0 0 8px rgba(255,79,94,.6)}
+
+/* ===== набор в группы дополнительного образования ===== */
+.enroll-table td .cell-input{
+  border:1px solid transparent;background:transparent;border-radius:7px;padding:4px 7px;
+  font-size:12.5px;min-width:230px;
+}
+.enroll-table td .cell-input:hover{border-color:var(--line)}
+.enroll-table td .cell-input:focus{background:#070c11}
+.enroll-table td .cell-input.muted{color:var(--muted);min-width:150px}
+input.box{
+  appearance:none;-webkit-appearance:none;width:19px;height:19px;margin:0;padding:0;cursor:pointer;
+  border:1px solid var(--line);border-radius:6px;background:#070c11;display:inline-grid;place-items:center;
+  transition:border-color .18s,background .18s,box-shadow .22s;
+}
+input.box:hover{border-color:rgba(43,255,139,.6);box-shadow:0 0 10px rgba(43,255,139,.25)}
+input.box:checked{background:linear-gradient(180deg,var(--neon),var(--neon-dim));border-color:transparent;
+  box-shadow:0 0 12px rgba(43,255,139,.45)}
+input.box:checked::after{content:'✓';color:#04120a;font-size:12px;font-weight:800;line-height:1}
+.btn.muted-btn{opacity:.5}
+.btn.muted-btn:hover{opacity:1}
