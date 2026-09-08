@@ -235,6 +235,7 @@ table.compact th,table.compact td{padding:5px 8px;font-size:12.5px}
 .pill.warn{color:var(--amber);border-color:rgba(255,200,87,.4);background:rgba(255,200,87,.08)}
 .pill.bad{color:var(--red);border-color:rgba(255,79,94,.4);background:rgba(255,79,94,.08)}
 .pill.cyan{color:var(--cyan);border-color:rgba(49,217,245,.4);background:rgba(49,217,245,.08)}
+th.active-rate{color:var(--neon);text-shadow:0 0 8px rgba(43,255,139,.5)}
 
 .mono{font-family:var(--mono)}
 .muted{color:var(--muted)}

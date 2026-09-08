@@ -21,6 +21,8 @@ export const DEFAULTS = {
     intensive: 17811.97,
     quality: 2467.98,
     gph: 22142,
+    rate: 1,        // официальная ставка: 0.5 / 1 / 1.5
+    hasGph: true,   // есть ли вдобавок договор ГПХ (по умолчанию — как раньше)
     ndfl: 13,
     district: 30,
     north: 30,
@@ -125,6 +127,19 @@ export function allGroups(st = state) {
 
 export function findGroup(groupId, st = state) {
   return allGroups(st).find(x => x.group.id === groupId) || null;
+}
+
+/**
+ * Занятия по коду расписания напрямую — для групп «Набора» (дополнительное
+ * образование, которые педагог набирает сам). Такие группы не входят в
+ * st.mapping (он только для сетевых предметов из списка обучающихся), код
+ * привязывается прямо к записи группы в st.enroll.groups.
+ */
+export function lessonsForCode(shift, code, st = state) {
+  const sch = st.schedules[String(shift)];
+  if (!sch || !code) return [];
+  return sch.lessons.filter(l => l.code === code)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.no - b.no);
 }
 
 /** Занятия конкретной группы в заезде — по сопоставленным кодам расписания. */

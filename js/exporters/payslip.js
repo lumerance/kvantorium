@@ -2,8 +2,9 @@
 // (см. пример в чате): шапка с ФИО/должностью/окладом, таблица начислений
 // слева и удержаний/выплат справа, итог. Строится из сохранённой записи
 // «Истории зарплат» — того, что реально стояло в калькуляторе на момент
-// сохранения (params) и что из этого посчиталось (calc.one — «1 ставка»,
-// ГПХ в официальный листок не входит, это отдельный договор).
+// сохранения (params) и что из этого посчиталось (calc.current — по ставке,
+// на которой педагог официально оформлен; ГПХ в официальный листок не
+// входит, это отдельный договор).
 import { buildDocx, p, table } from '../lib/docx-write.js';
 import { MONTHS } from '../core/ui.js';
 import { applyBonus } from '../pages/salary.js';
@@ -22,7 +23,9 @@ const fmt1 = (n) => (Math.round((n + Number.EPSILON) * 10) / 10).toLocaleString(
 export async function buildPayslipDocx(entry, requisites) {
   const bonus = entry.bonus || { amount: 0, note: '' };
   const calc = applyBonus(entry.calc, bonus, entry.params.ndfl);
-  const one = calc.one;
+  // calc.current — расчёт по ставке, на которой педагог реально оформлен
+  // (params.rate); у старых записей без этого поля равносильно «1 ставка».
+  const one = calc.current || calc.one;
   const period = `${SHORT_MONTHS[entry.month - 1]} ${entry.year}`;
   const days = one.partial ? one.fact : one.norm;
   const hours = days * HOURS_PER_DAY;

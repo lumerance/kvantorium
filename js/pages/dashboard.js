@@ -2,7 +2,7 @@
 import { h, statCard, hoursFmt, money0, dateRu, emptyState, WEEKDAY_SHORT, MONTHS } from '../core/ui.js';
 import { getState, lessonsForGroup, allGroups } from '../core/store.js';
 import { computeHours } from './hours.js';
-import { calcAll } from './salary.js';
+import { calcAll, RATE_LABELS } from './salary.js';
 import { go } from '../core/router.js';
 import { SHIFTS } from './journal.js';
 
@@ -10,7 +10,8 @@ export function render(root) {
   const st = getState();
   const c = computeHours(st);
   const s = st.salary;
-  const r = calcAll({ base: s.base, intensive: s.intensive, quality: s.quality, gph: s.gph, ndfl: s.ndfl, district: s.district, north: s.north, workDays: s.workDays, rv: s.rv });
+  const r = calcAll({ base: s.base, intensive: s.intensive, quality: s.quality, gph: s.gph, ndfl: s.ndfl, district: s.district, north: s.north, workDays: s.workDays, rv: s.rv, rate: s.rate, hasGph: s.hasGph });
+  const formatLabel = (RATE_LABELS[r.rate] || RATE_LABELS[1]) + (r.hasGph ? ' + ГПХ' : '');
 
   root.append(h('div', { class: 'page-head' },
     h('div', {},
@@ -27,7 +28,7 @@ export function render(root) {
     statCard('Групп в журнале', String(groups.length), `${st.students?.stats.students || 0} обучающихся`),
     statCard('Заездов загружено', `${loadedShifts.length} / 3`, loadedShifts.length ? `заезды: ${loadedShifts.join(', ')}` : 'расписание не загружено', 'cyan'),
     statCard('Закрыто часов', hoursFmt(c.total.done), `из ${hoursFmt(c.norm)} · осталось ${hoursFmt(Math.max(0, c.norm - c.total.done))}`, 'amber'),
-    statCard('Зарплата на руки', money0(r.withGph), `1 ставка + ГПХ · ${MONTHS[s.month - 1]} ${s.year}`, ''),
+    statCard('Зарплата на руки', money0(r.withGph), `${formatLabel} · ${MONTHS[s.month - 1]} ${s.year}`, ''),
   ));
 
   root.append(h('div', { class: 'grid cols-2', style: { marginBottom: '16px' } },
@@ -57,7 +58,7 @@ export function render(root) {
         'Норма делится поровну между учебными и методическими часами.')),
     h('div', { class: 'card' },
       h('h3', {}, 'Сравнение форматов оплаты'),
-      h('div', { class: 'kv' }, h('span', { class: 'k' }, '1 ставка + ГПХ, на руки'), h('span', { class: 'v neon-text' }, money0(r.withGph))),
+      h('div', { class: 'kv' }, h('span', { class: 'k' }, `${formatLabel}, на руки`), h('span', { class: 'v neon-text' }, money0(r.withGph))),
       h('div', { class: 'kv' }, h('span', { class: 'k' }, '1,5 ставки официально, на руки'), h('span', { class: 'v' }, money0(r.oneHalf.net))),
       h('div', { class: 'kv total' },
         h('span', { class: 'k' }, r.benefit >= 0 ? 'Выгода текущего формата' : 'Проигрыш текущего формата'),

@@ -1,9 +1,22 @@
 // Электронный журнал: заезды → предметы → группы (вкладки), отметки и средние баллы.
 import { h, toast, dateRu, download, emptyState, WEEKDAY_SHORT, modal } from '../core/ui.js';
-import { getState, update, lessonsForGroup, lessonKey } from '../core/store.js';
+import { getState, update, lessonsForGroup, lessonsForCode, lessonKey } from '../core/store.js';
 import { go } from '../core/router.js';
 
 export const SHIFTS = [1, 2, 3];
+// Группы «Набора» (дополнительное образование, которые педагог набирает сам)
+// показываются в журнале как ещё один псевдо-предмет рядом с сетевыми —
+// занятия для них берутся напрямую по коду расписания, а не через st.mapping.
+export const ENROLL_SUBJECT_ID = '__enroll__';
+const shortName = (fio) => (fio || '').trim().split(/\s+/).slice(0, 2).join(' ');
+
+function enrollAsSubject(st) {
+  const groups = (st.enroll?.groups || []).map(g => ({
+    id: g.id, name: g.name, code: g.code || null, program: g.program || '',
+    students: g.students.map(s => ({ id: s.id, fio: s.fio, short: shortName(s.fio) })),
+  }));
+  return { id: ENROLL_SUBJECT_ID, title: 'Набор (ДО)', isEnroll: true, groups };
+}
 const MARKS = ['✓', 'н', '5', '4', '3', '2'];
 const CYCLE = ['', '✓', 'н', '5', '4', '3', '2'];
 const markClass = (m) => m === '✓' ? 'm-p' : m === 'н' ? 'm-n' : m ? 'm-' + m : '';
@@ -47,22 +60,26 @@ export function render(root) {
     const st = getState();
     wrap.innerHTML = '';
 
-    if (!st.students?.subjects?.length) {
+    const realSubjects = st.students?.subjects || [];
+    const enrollGroups = st.enroll?.groups || [];
+    if (!realSubjects.length && !enrollGroups.length) {
       wrap.append(h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Электронный журнал'))));
       wrap.append(h('div', { class: 'card' }, emptyState('📋',
-        'Список обучающихся ещё не загружен. Импортируйте docx со списком детей и docx с расписанием.',
-        h('button', { class: 'btn primary', onClick: () => go('data') }, 'Перейти к импорту'))));
+        'Список обучающихся ещё не загружен. Импортируйте docx со списком детей и docx с расписанием — либо заведите группу дополнительного образования на вкладке «Набор».',
+        h('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' } },
+          h('button', { class: 'btn primary', onClick: () => go('data') }, 'Перейти к импорту'),
+          h('button', { class: 'btn', onClick: () => go('enroll') }, 'Открыть «Набор»')))));
       return;
     }
 
     const ui = st.ui;
     const shift = ui.journalShift || 1;
-    const subjects = st.students.subjects;
+    const subjects = enrollGroups.length ? [...realSubjects, enrollAsSubject(st)] : realSubjects;
     let subject = subjects.find(s => s.id === ui.journalSubject) || subjects[0];
     let group = subject.groups.find(g => g.id === ui.journalGroup) || subject.groups[0];
 
     const sched = st.schedules[String(shift)];
-    const lessons = lessonsForGroup(shift, group.id, st);
+    const lessons = subject.isEnroll ? lessonsForCode(shift, group.code, st) : lessonsForGroup(shift, group.id, st);
 
     wrap.append(h('div', { class: 'page-head' },
       h('div', {},
@@ -72,8 +89,8 @@ export function render(root) {
       h('div', { class: 'head-actions' },
         h('button', { class: 'btn', onClick: () => markAllPresent(shift, group, lessons) }, '✓ Все присутствуют'),
         h('button', { class: 'btn', onClick: () => exportJournal(st, subject, group, shift, lessons) }, '⤓ Экспорт CSV'),
-        h('button', { class: 'btn primary', onClick: () => openVedomost(subject) }, '📄 Создание ведомости'),
-        h('button', { class: 'btn', onClick: () => go('data') }, '⚙ Данные'),
+        subject.isEnroll ? null : h('button', { class: 'btn primary', onClick: () => openVedomost(subject) }, '📄 Создание ведомости'),
+        h('button', { class: 'btn', onClick: () => go(subject.isEnroll ? 'enroll' : 'data') }, subject.isEnroll ? '⚙ Набор' : '⚙ Данные'),
       )));
 
     /* --- вкладки заездов --- */
@@ -130,6 +147,14 @@ export function render(root) {
       return;
     }
     if (!lessons.length) {
+      if (subject.isEnroll) {
+        const msg = group.code
+          ? `В расписании ${shift} заезда нет занятий с кодом «${group.code}».`
+          : `Группа «${group.name}» не привязана к коду в расписании.`;
+        wrap.append(h('div', { class: 'card' }, emptyState('🔗', msg,
+          h('button', { class: 'btn primary', onClick: () => go('enroll') }, 'Привязать код в «Наборе»'))));
+        return;
+      }
       const mapped = Object.entries(st.mapping).filter(([, m]) => m?.groupId === group.id).length;
       wrap.append(h('div', { class: 'card' }, emptyState('🔗',
         mapped ? `В расписании ${shift} заезда нет занятий для этой группы.`

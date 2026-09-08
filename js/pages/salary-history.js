@@ -4,7 +4,7 @@
 // и точную печатную копию официального расчётного листка (печать / PDF).
 import { h, money0, toast, download, confirmBox, modal, MONTHS, emptyState, printElement } from '../core/ui.js';
 import { getState, update } from '../core/store.js';
-import { comparisonCard, detailTableCard, applyBonus } from './salary.js';
+import { comparisonCard, detailTableCard, applyBonus, RATE_LABELS } from './salary.js';
 import { buildPayslipDocx } from '../exporters/payslip.js';
 import { payslipPrintNode } from '../exporters/payslip-print.js';
 import { go } from '../core/router.js';
@@ -71,18 +71,26 @@ export function render(root) {
     const requisites = st.salary.requisites || {};
     const bonus = entry.bonus || { amount: 0, note: '' };
     const calc = applyBonus(entry.calc, bonus, entry.params.ndfl);
-    const one = calc.one;
+    // calc.current — расчёт по ставке, на которой педагог был оформлен в этом
+    // месяце (params.rate); у старых записей без этого поля равносильно «1 ставка».
+    const one = calc.current || calc.one;
+    const rate = calc.rate ?? entry.params.rate ?? 1;
+    const hasGph = calc.hasGph ?? entry.params.hasGph ?? true;
+    const rateLabel = RATE_LABELS[rate] || RATE_LABELS[1];
 
     const body = h('div', {});
     body.append(h('div', { class: 'grid cols-3', style: { marginBottom: '16px' } },
       h('div', { class: 'card' }, h('div', { class: 'stat' },
-        h('div', { class: 'label' }, 'На руки (1 ставка)'),
+        h('div', { class: 'label' }, `На руки (${rateLabel})`),
         h('div', { class: 'value' }, money0(one.net)),
         h('div', { class: 'sub' }, `до НДФЛ ${money0(one.gross)}${bonus.amount ? ` · включая премию ${money0(bonus.amount)}` : ''}`))),
-      h('div', { class: 'card' }, h('div', { class: 'stat' },
+      hasGph ? h('div', { class: 'card' }, h('div', { class: 'stat' },
         h('div', { class: 'label' }, 'С ГПХ на руки'),
         h('div', { class: 'value cyan' }, money0(calc.withGph)),
-        h('div', { class: 'sub' }, `ГПХ ${money0(entry.params.gph)} · после НДФЛ ${money0(calc.gphNet)}`))),
+        h('div', { class: 'sub' }, `ГПХ ${money0(entry.params.gph)} · после НДФЛ ${money0(calc.gphNet)}`))) : h('div', { class: 'card' }, h('div', { class: 'stat' },
+        h('div', { class: 'label' }, 'Договор ГПХ'),
+        h('div', { class: 'value muted' }, 'не подключен'),
+        h('div', { class: 'sub' }, 'в этом расчёте — только зарплата по ставке'))),
       h('div', { class: 'card' }, h('div', { class: 'stat' },
         h('div', { class: 'label' }, 'Отработано'),
         h('div', { class: 'value plain' }, one.partial ? `${one.fact} из ${one.norm} дн.` : `${one.norm} дн. (полный)`),
@@ -147,7 +155,8 @@ function bonusCard(entry, outerRedraw, openMonth) {
       // вкладке «Отпускные») пересчитываются заново от исходного calc + премии,
       // без накопления — так повторное сохранение с другой суммой не задваивает.
       const calc = applyBonus(e.calc, e.bonus, e.params.ndfl);
-      e.gross = calc.one.gross; e.net = calc.one.net;
+      const cur = calc.current || calc.one;
+      e.gross = cur.gross; e.net = cur.net;
       e.withGph = calc.withGph; e.oneHalf = calc.oneHalf.net; e.benefit = calc.benefit;
     });
     document.querySelector('.modal-back')?.remove();

@@ -5,7 +5,7 @@
 import { h, toast, download, confirmBox, modal, emptyState, progressBar, printElement } from '../core/ui.js';
 import { getState, update } from '../core/store.js';
 import { parseCode } from '../parsers/schedule.js';
-import { SHIFTS } from './journal.js';
+import { SHIFTS, ENROLL_SUBJECT_ID } from './journal.js';
 import { go } from '../core/router.js';
 
 const MIN_SIZE = 8, MAX_SIZE = 12;   // норматив наполняемости группы ДО
@@ -61,14 +61,28 @@ function knownFio(st) {
   return [...out].sort();
 }
 
-function addGroup(name, program = '') {
+function addGroup(name, program = '', code = null) {
   const clean = norm(name);
   if (!clean) return toast('Впишите название группы', 'err');
   if (groupsOf().some(g => g.name.toLowerCase() === clean.toLowerCase())) return toast(`Группа «${clean}» уже есть`, 'err');
   update(x => {
-    x.enroll.groups.push({ id: nextId('eg_'), name: clean, program: norm(program), createdAt: new Date().toISOString(), students: [] });
+    x.enroll.groups.push({ id: nextId('eg_'), name: clean, program: norm(program), code: code || null, createdAt: new Date().toISOString(), students: [] });
   });
   return true;
+}
+
+/** Сколько занятий по коду набежало во всех загруженных заездах — подсказка при выборе кода. */
+function lessonsCountForCode(st, code) {
+  if (!code) return 0;
+  let n = 0;
+  for (const sh of SHIFTS) n += (st.schedules[String(sh)]?.lessons || []).filter(l => l.code === code).length;
+  return n;
+}
+
+/** Открыть журнал сразу на этой группе «Набора». */
+function openInJournal(groupId) {
+  update(x => { x.ui.journalSubject = ENROLL_SUBJECT_ID; x.ui.journalGroup = groupId; });
+  go('journal');
 }
 
 /* ======================= страница ======================= */
@@ -162,8 +176,13 @@ function addCard(st, redraw) {
   const nameInput = h('input', { type: 'text', placeholder: 'например: У1', class: 'mono' });
   const progInput = h('input', { type: 'text', placeholder: 'направление (необязательно)' });
   const create = () => {
-    if (addGroup(nameInput.value, progInput.value) === true) {
-      toast(`Группа «${norm(nameInput.value)}» создана`);
+    const name = norm(nameInput.value);
+    // если вписанное название совпадает с кодом из расписания — сразу
+    // привязываем группу к нему, чтобы занятия появились в журнале без
+    // отдельного шага
+    const matchedCode = scheduleCodes(st).find(c => c.toLowerCase() === name.toLowerCase()) || null;
+    if (addGroup(nameInput.value, progInput.value, matchedCode) === true) {
+      toast(`Группа «${name}» создана`);
       nameInput.value = ''; progInput.value = '';
       redraw();
     }
@@ -179,7 +198,7 @@ function addCard(st, redraw) {
     ...free.map(code => h('button', {
       class: 'btn sm' + (isDoCode(code) ? ' ghost' : ' ghost muted-btn'),
       title: programForCode(st, code) || 'Создать группу с этим названием',
-      onClick: () => { if (addGroup(code, programForCode(st, code)) === true) { toast(`Группа «${code}» создана`); redraw(); } },
+      onClick: () => { if (addGroup(code, programForCode(st, code), code) === true) { toast(`Группа «${code}» создана`); redraw(); } },
     }, `+ ${code}`)));
 
   return h('div', { class: 'card', style: { marginBottom: '16px' } },
@@ -199,6 +218,30 @@ function addCard(st, redraw) {
       : (scheduleCodes(st).length
         ? h('p', { class: 'muted', style: { fontSize: '12.5px', marginBottom: 0 } }, 'Все коды из расписания уже заведены как группы.')
         : h('p', { class: 'muted', style: { fontSize: '12.5px', marginBottom: 0 } }, 'Загрузите расписание заезда на вкладке «Данные» — и названия групп можно будет добавлять одним кликом.')));
+}
+
+/** Строка привязки группы к коду расписания — источник занятий для журнала. */
+function codeRow(g, st, refresh) {
+  const codes = scheduleCodes(st);
+  const n = lessonsCountForCode(st, g.code);
+  return h('div', {
+    style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '8px 0 4px', fontSize: '12.5px' },
+  },
+    h('span', { class: 'muted' }, '📅 Код в расписании:'),
+    codes.length
+      ? h('select', {
+        class: 'mono', style: { width: 'auto' },
+        onChange: (e) => {
+          const v = e.target.value || null;
+          update(x => { const gr = (x.enroll.groups || []).find(y => y.id === g.id); if (gr) gr.code = v; });
+          refresh();
+        },
+      },
+        h('option', { value: '', selected: !g.code }, '— не привязан —'),
+        ...codes.map(c => h('option', { value: c, selected: g.code === c }, c)))
+      : h('span', { class: 'muted' }, g.code || '— не привязан —'),
+    g.code ? h('span', { class: 'muted' }, `· ${n} занятий во всех заездах`) : null,
+    h('button', { class: 'btn sm ghost', onClick: () => openInJournal(g.id) }, '📋 Открыть в журнале'));
 }
 
 /* ---------------- карточка группы ---------------- */
@@ -316,6 +359,7 @@ function groupCard(g, { refresh, reload, refreshTotals }) {
         })
       }, '🗑')),
     g.program ? h('div', { class: 'card-sub', style: { marginTop: 0 } }, g.program) : null,
+    codeRow(g, st, refresh),
     c.n ? table : h('p', { class: 'muted', style: { fontSize: '13px', margin: '10px 0' } }, 'Пока пусто — впишите первого ребёнка ниже.'),
     h('datalist', { id: listId }, ...knownFio(st).map(f => h('option', { value: f }))),
     h('div', { class: 'row', style: { marginTop: '12px' } },

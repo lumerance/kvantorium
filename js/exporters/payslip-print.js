@@ -19,7 +19,9 @@ const nat = (n) => (Math.round((n + Number.EPSILON) * 100) / 100).toLocaleString
 export function payslipPrintNode(entry, requisites) {
   const bonus = entry.bonus || { amount: 0, note: '' };
   const calc = applyBonus(entry.calc, bonus, entry.params.ndfl);
-  const one = calc.one;
+  // calc.current — расчёт по ставке, на которой педагог реально оформлен
+  // (params.rate); у старых записей без этого поля равносильно «1 ставка».
+  const one = calc.current || calc.one;
   const period = `${SHORT_MONTHS[entry.month - 1]} ${entry.year}`;
   const days = one.partial ? one.fact : one.norm;
   const hours = days * HOURS_PER_DAY;
