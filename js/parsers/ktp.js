@@ -49,15 +49,29 @@ export function detectColumns(headerCells) {
   return map;
 }
 
-const isHeaderMap = (m) => m.theme !== undefined && (m.content !== undefined || m.type !== undefined || m.hours !== undefined);
+// Настоящая КТП — таблица «по одному занятию на строку»: у неё, кроме темы
+// и часов, почти всегда есть ещё содержание или тип занятия. В документе
+// программы рядом обычно лежит и учебно-тематический план — сводная таблица
+// по модулям («Модуль 1 — 34 ч, 9 теории, 25 практики») с теми же по смыслу
+// колонками «Наименование модуля/темы» + «Количество часов», но без
+// содержания и типа занятия и всего на пару строк по числу модулей, а не
+// занятий — её принимать за КТП нельзя, иначе часы модуля задвоятся с часами
+// самих занятий. Отличаем по колонкам, а когда их нет — по числу строк:
+// у настоящей КТП обычно от 15 занятий и больше.
+const isHeaderMap = (m, dataRows = 0) => m.theme !== undefined && m.hours !== undefined &&
+  (m.content !== undefined || m.type !== undefined || dataRows >= 15);
 
 function rowFrom(cells, map) {
   if (cells.length < 2) return null;              // строка-раздел во всю ширину
+  // итоговая строка «Итого: 34» обычно смята до 2-3 ячеек ("", "Итого:", "34"),
+  // и её текст попадает не в колонку темы, а куда придётся — ищем по всей строке.
+  // (?![а-яё]) — а не \b: граница слова в JS кириллицу не видит, и без него
+  // «Итого» ловило и настоящую тему «Итоговая визуализация сцены…».
+  if (cells.some(c => /^(итого|всего)(?![а-яё])/i.test(norm(c)))) return null;
   const get = (k) => (map[k] === undefined ? '' : norm(cells[map[k]] || ''));
   const theme = get('theme');
   const content = get('content');
   if (!theme && !content) return null;
-  if (/^итого|^всего/i.test(theme)) return null;  // итоговая строка таблицы
   const hoursNum = parseFloat(get('hours').replace(',', '.'));
   const no = parseInt(get('no'), 10);
   return {
@@ -69,19 +83,28 @@ function rowFrom(cells, map) {
 }
 
 /** Строки КТП из таблиц документа. Шапка ищется в первых строках каждой
- *  таблицы; таблица без шапки считается продолжением предыдущей (Word рвёт
- *  длинные таблицы на границе страниц). */
+ *  таблицы; таблица без своей шапки считается продолжением предыдущей КТП
+ *  (Word рвёт длинные таблицы на границе страниц) — но только если у нее
+ *  столько же колонок: иначе это уже следующий раздел документа (список
+ *  литературы, материально-техническое обеспечение и т.п.), и шапку от КТП
+ *  к нему подключать нельзя — иначе на его строки навесятся чужие колонки
+ *  «тема»/«часы», и в подсчёт затесаются посторонние строки. */
 export function parseKtpTables(tables) {
   const rows = [];
   let map = null;
+  let mapWidth = null;
   for (const t of tables) {
     const grid = (t.rows || []).map(rowCells);
     let start = 0;
+    let ownHeader = false;
     for (let i = 0; i < Math.min(grid.length, 4); i++) {
       const m = detectColumns(grid[i]);
-      if (isHeaderMap(m)) { map = m; start = i + 1; break; }
+      if (isHeaderMap(m, grid.length - (i + 1))) { map = m; mapWidth = t.width; start = i + 1; ownHeader = true; break; }
     }
-    if (!map) continue;   // до первой шапки таблицы КТП не относятся
+    if (!ownHeader) {
+      if (!map || t.width !== mapWidth) continue;  // не КТП и не продолжение КТП
+      start = 0;
+    }
     for (let i = start; i < grid.length; i++) {
       const rec = rowFrom(grid[i], map);
       if (rec) rows.push(rec);

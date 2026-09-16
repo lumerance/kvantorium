@@ -4,12 +4,13 @@
 // переключаются вкладкой вверху страницы, вся логика ниже общая — просто
 // читает/пишет либо st.* (официальный), либо st.actual.* (фактический).
 import { h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile } from '../core/ui.js';
-import { getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule } from '../core/store.js';
+import { getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule, autoMapAll } from '../core/store.js';
 import { importStudentsFile, importStudentsCsvFile, studentsToCsv } from '../parsers/students.js';
-import { importScheduleFile, autoMatch, parseCode } from '../parsers/schedule.js';
+import { importScheduleFile, parseCode } from '../parsers/schedule.js';
 import { importPlanFile } from '../parsers/plan.js';
 import { SHIFTS } from './journal.js';
 import { programsCard } from './ktp-panel.js';
+import { actualScheduleCard } from './actual-schedule-panel.js';
 import { go } from '../core/router.js';
 
 const dataOf = (st, kind) => (kind === 'actual' ? st.actual : st);
@@ -332,6 +333,10 @@ function planCard(st, redraw) {
 
 /* ---------------- расписание ---------------- */
 function scheduleCard(st, redraw, kind) {
+  // Фактическое расписание вносится день за днём (см. actual-schedule-panel.js) —
+  // школа присылает его на завтра, а не файлом на весь заезд, как официальное.
+  if (kind === 'actual') return actualScheduleCard(redraw);
+
   const data = dataOf(st, kind);
   const cards = SHIFTS.map(shift => {
     const sc = data.schedules[String(shift)];
@@ -409,25 +414,6 @@ function showLessons(sc, shift) {
 }
 
 /* ---------------- сопоставление кодов ---------------- */
-export function autoMapAll(kind) {
-  const st = getState();
-  const data = dataOf(st, kind);
-  const subjects = data.students?.subjects || [];
-  if (!subjects.length) return 0;
-  const codes = new Set();
-  for (const sh of SHIFTS) for (const c of (data.schedules[String(sh)]?.codes || [])) codes.add(c);
-  let n = 0;
-  update(x => {
-    const root = dataOf(x, kind);
-    for (const c of codes) {
-      if (root.mapping[c]) continue;
-      const m = autoMatch(c, subjects);
-      if (m) { root.mapping[c] = m; n++; }
-    }
-  });
-  return n;
-}
-
 function mappingCard(st, redraw, kind) {
   const data = dataOf(st, kind);
   const codes = new Set();

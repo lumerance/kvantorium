@@ -1,4 +1,6 @@
 // Единое хранилище состояния (localStorage) + подписки.
+import { autoMatch } from '../parsers/schedule.js';
+
 const KEY = 'kvantorium28.state.v1';
 
 export const DEFAULTS = {
@@ -235,6 +237,28 @@ export function removeGroup(groupId, kind = null) {
 export function removeSubject(subjectId, kind = null) {
   const keep = allGroups(state, kind).filter(x => x.subject.id !== subjectId).map(x => x.group.id);
   keepGroups(keep, kind);
+}
+
+/** Сопоставляет ещё не сопоставленные коды расписания с группами из списка
+ *  обучающихся автоматически (по grade/префиксу — см. parsers/schedule.js).
+ *  kind как везде: 'actual' — фактический журнал, иначе официальный. */
+export function autoMapAll(kind = null) {
+  const st = state;
+  const data = ns(st, kind);
+  const subjects = data.students?.subjects || [];
+  if (!subjects.length) return 0;
+  const codes = new Set();
+  for (const sh of [1, 2, 3]) for (const c of (data.schedules[String(sh)]?.codes || [])) codes.add(c);
+  let n = 0;
+  update(x => {
+    const root = ns(x, kind);
+    for (const c of codes) {
+      if (root.mapping[c]) continue;
+      const m = autoMatch(c, subjects);
+      if (m) { root.mapping[c] = m; n++; }
+    }
+  });
+  return n;
 }
 
 /** Оставляет в расписании заезда только занятия выбранных педагогов и кодов. */
