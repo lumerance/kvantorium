@@ -90,7 +90,8 @@ export function ktpCard(st, group, shift, lessons, redraw) {
   else if (leftover) body.append(h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '4px 0 0' } },
     `Осталось нераспределённых часов КТП в этом заезде: ${leftover}.`));
 
-  return h('details', { class: 'acc no-print', open: true, style: { marginBottom: '14px' } },
+  // свёрнуто по умолчанию — раскрывается по клику, если тема нужна прямо сейчас
+  return h('details', { class: 'acc no-print', style: { marginBottom: '14px' } },
     h('summary', {}, '📚 Темы по КТП — по дням, для электронного журнала'),
     body);
 }
