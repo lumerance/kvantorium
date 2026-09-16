@@ -85,7 +85,9 @@ body{
   border-color:transparent;box-shadow:0 0 22px rgba(43,255,139,.45);
 }
 /* пункт навигации с выпадающим списком (Журнал: Фактический / Официальный) */
-.nav-item{position:relative}
+/* display:flex — иначе .nav-btn внутри не блокируется флексом .nav и теряет
+   вертикальный padding, из-за чего кнопка «Журнал» съезжает по высоте */
+.nav-item{position:relative;display:flex}
 .nav-dropdown{
   position:absolute;top:100%;left:0;padding-top:8px;z-index:60;
   opacity:0;visibility:hidden;transform:translateY(-6px);
