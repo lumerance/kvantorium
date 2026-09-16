@@ -71,6 +71,24 @@ export function download(filename, content, mime = 'text/plain;charset=utf-8') {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+/** Копирование в буфер обмена: clipboard API, а где его нет (http, старый
+ *  браузер) — через скрытую textarea и execCommand. */
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = h('textarea', { style: { position: 'fixed', top: '-1000px', opacity: '0' } });
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  }
+}
+
 export function pickFile(accept, onFile) {
   const input = h('input', { type: 'file', accept, style: { display: 'none' }, onChange: (e) => {
     const f = e.target.files[0]; if (f) onFile(f);

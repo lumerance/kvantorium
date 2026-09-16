@@ -413,6 +413,20 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
 .enroll-table td .cell-input:hover{border-color:var(--line)}
 .enroll-table td .cell-input:focus{background:#070c11}
 .enroll-table td .cell-input.muted{color:var(--muted);min-width:150px}
+/* ===== КТП: темы занятий по дням ===== */
+.ktp-day{
+  border:1px solid var(--line-soft);border-radius:12px;padding:11px 13px;margin-bottom:10px;
+  background:rgba(255,255,255,.015);
+}
+.ktp-day-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:13px}
+.ktp-field{
+  display:grid;grid-template-columns:104px minmax(0,1fr) auto;gap:10px;align-items:start;
+  padding:6px 0;border-top:1px dashed var(--line-soft);
+}
+.ktp-field .k{color:var(--muted);font-size:12px;font-weight:600;padding-top:3px}
+.ktp-field .v{font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.ktp-field .v.empty{color:var(--muted);font-style:italic}
+
 input.box{
   appearance:none;-webkit-appearance:none;width:19px;height:19px;margin:0;padding:0;cursor:pointer;
   border:1px solid var(--line);border-radius:6px;background:#070c11;display:inline-grid;place-items:center;

@@ -11,6 +11,7 @@
 // сами отметки официального журнала.
 import { h, toast, dateRu, download, emptyState, WEEKDAY_SHORT, modal } from '../core/ui.js';
 import { getState, update, lessonsForGroup, lessonsForCode, lessonKey } from '../core/store.js';
+import { ktpCard } from './ktp-panel.js';
 import { go } from '../core/router.js';
 
 export const SHIFTS = [1, 2, 3];
@@ -204,6 +205,10 @@ export function render(root, params = {}) {
         h('button', { class: 'btn primary', onClick: () => go('data', isActual ? { kind: 'actual' } : undefined) }, 'Настроить сопоставление'))));
       return;
     }
+
+    // темы КТП по дням — только для официального расписания, по нему заполняется
+    // электронный журнал
+    if (!isActual) wrap.append(ktpCard(st, group, shift, lessons, redraw));
 
     wrap.append(journalTable(data, subject, group, shift, lessons, setMark, redraw, () => brush));
   }

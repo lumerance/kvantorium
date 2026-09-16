@@ -9,6 +9,7 @@ import { importStudentsFile, importStudentsCsvFile, studentsToCsv } from '../par
 import { importScheduleFile, autoMatch, parseCode } from '../parsers/schedule.js';
 import { importPlanFile } from '../parsers/plan.js';
 import { SHIFTS } from './journal.js';
+import { programsCard } from './ktp-panel.js';
 import { go } from '../core/router.js';
 
 const dataOf = (st, kind) => (kind === 'actual' ? st.actual : st);
@@ -46,7 +47,10 @@ export function render(root, params = {}) {
     wrap.append(h('div', { style: { marginBottom: '16px' } }, studentsCard(st, redraw, kind)));
     wrap.append(scheduleCard(st, redraw, kind));
     wrap.append(h('div', { style: { marginBottom: '16px' } }, mappingCard(st, redraw, kind)));
-    if (kind === 'official') wrap.append(planCard(st, redraw));
+    if (kind === 'official') {
+      wrap.append(h('div', { style: { marginBottom: '16px' } }, planCard(st, redraw)));
+      wrap.append(programsCard(st, redraw));
+    }
   }
 
   redraw();

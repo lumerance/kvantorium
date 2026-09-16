@@ -63,6 +63,12 @@ export const DEFAULTS = {
     mapping: {},
     journal: {},
   },
+  // Учебные программы с КТП: темы/содержание/тип занятия по часам. Программа
+  // привязывается к группе, дальше часы раскладываются по заездам и занятиям
+  // официального расписания (см. js/parsers/ktp.js и js/pages/ktp-panel.js).
+  programs: [],                 // [{id, name, sourceName, shiftHours:[12,12,12], rows:[{no,theme,content,type,hours}]}]
+  groupPrograms: {},            // groupId -> programId
+  ktpOffsets: {},               // "groupId|shift" -> сдвиг по КТП, если занятие переносили
   vedomostHeader: {},           // шапка итоговой ведомости
   vedomostGroups: [],           // группы, попадающие в ведомость
   vedomostMarks: {},            // ручные правки оценок: studentId -> {1,2,3,final}
