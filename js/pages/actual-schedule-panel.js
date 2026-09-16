@@ -28,6 +28,18 @@ function bumpTime(hhmm, minutes) {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
+/**
+ * № урока — сквозной порядковый номер занятия за день по времени начала, а
+ * не по счёту у своей группы: если после двух уроков 7Б идут два урока 7В,
+ * у них всё равно 3 и 4, а не заново 1 и 2 (реальная нумерация школьных
+ * уроков в течение дня общая на всех, вне зависимости от того, какой класс
+ * в какой из них занимается).
+ */
+function timeRanks(lessons) {
+  const times = [...new Set(lessons.map(l => l.time))].sort();
+  return new Map(times.map((t, i) => [t, i + 1]));
+}
+
 function recalcMeta(sc) {
   sc.teachers = [...new Set(sc.lessons.map(l => l.teacher).filter(Boolean))];
   sc.codes = [...new Set(sc.lessons.filter(l => l.kind !== 'event').map(l => l.code))].sort();
@@ -116,7 +128,7 @@ export function actualScheduleCard(outerRedraw) {
       const time = norm(timeInput.value);
       if (!code) { toast('Впишите группу', 'err'); codeInput.focus(); return; }
       if (!time) { toast('Впишите время', 'err'); timeInput.focus(); return; }
-      draft.lessons.push({ no: nextNoFor(code), time, code, dir: norm(dirInput.value) });
+      draft.lessons.push({ time, code, dir: norm(dirInput.value) });
       codeInput.value = ''; dirInput.value = ''; timeInput.value = '';
       render();
       wrap.querySelector('.add-lesson-code')?.focus();
@@ -125,17 +137,18 @@ export function actualScheduleCard(outerRedraw) {
     codeInput.classList.add('add-lesson-code');
 
     const quickAdd = (code) => {
-      draft.lessons.push({ no: nextNoFor(code), time: nextTimeFor(code), code, dir: '' });
+      draft.lessons.push({ time: nextTimeFor(code), code, dir: '' });
       render();
     };
 
+    const ranks = timeRanks(draft.lessons);
     const draftTable = draft.lessons.length ? h('div', { class: 'table-wrap', style: { marginTop: '10px' } },
       h('table', { class: 'compact' },
         h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, 'Время'), h('th', {}, 'Группа'), h('th', {}, 'Направление'), h('th', {}, ''))),
         h('tbody', {}, ...draft.lessons.slice().sort((a, b) => a.time.localeCompare(b.time)).map(l => {
           const idx = draft.lessons.indexOf(l);
           return h('tr', {},
-            h('td', { class: 'num muted mono' }, `${l.no}ур`),
+            h('td', { class: 'num muted mono' }, `${ranks.get(l.time)}ур`),
             h('td', { class: 'mono' }, l.time),
             h('td', {}, h('b', {}, l.code)),
             h('td', { class: 'muted', style: { fontSize: '12px' } }, l.dir || '—'),
@@ -158,10 +171,11 @@ export function actualScheduleCard(outerRedraw) {
         const sc = x.actual.schedules[key] || (x.actual.schedules[key] = {
           shift: draft.shift, sourceName: 'Внесено вручную по дням', teachers: [], codes: [], dates: [], weeks: [], notes: [], lessons: [],
         });
+        const ranks = timeRanks(draft.lessons);
         sc.lessons = sc.lessons.filter(l => l.date !== draft.date)
           .concat(draft.lessons.map(l => ({
             date: draft.date, weekday: weekdayOf(draft.date), week: null,
-            no: l.no, time: l.time, code: l.code, teacher: '', direction: l.dir, kind: 'group',
+            no: ranks.get(l.time), time: l.time, code: l.code, teacher: '', direction: l.dir, kind: 'group',
           })));
         recalcMeta(sc);
       });
@@ -189,11 +203,6 @@ export function actualScheduleCard(outerRedraw) {
         h('button', { class: 'btn primary', onClick: save }, '💾 Сохранить день'),
         draft.editKey || draft.lessons.length ? h('button', { class: 'btn ghost', onClick: () => { freshDraft(); render(); } }, 'Очистить') : null));
 
-    /** № занятия для группы — по счёту уже добавленных в этом дне. */
-    function nextNoFor(code) {
-      const used = draft.lessons.filter(l => l.code === code).length;
-      return used + 1;
-    }
     /** Время следующего занятия этой группы — через 45 минут после её последнего;
      *  для первой группы дня — через 45 минут после последнего занятия дня вообще. */
     function nextTimeFor(code) {
@@ -215,7 +224,7 @@ export function actualScheduleCard(outerRedraw) {
         h('span', { style: { flex: '1 1 auto' } }),
         h('button', {
           class: 'btn sm ghost', onClick: () => {
-            draft = { date: d.date, shift: d.shift, lessons: d.lessons.map(l => ({ no: l.no, time: l.time, code: l.code, dir: l.direction || '' })), editKey: { shift: d.shift, date: d.date } };
+            draft = { date: d.date, shift: d.shift, lessons: d.lessons.map(l => ({ time: l.time, code: l.code, dir: l.direction || '' })), editKey: { shift: d.shift, date: d.date } };
             render();
             wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
