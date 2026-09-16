@@ -27,7 +27,15 @@
   </div>
   <nav class="nav" id="nav">
     <a class="nav-btn" href="#/dashboard" data-route="dashboard">Обзор</a>
-    <a class="nav-btn" href="#/journal"   data-route="journal">Журнал</a>
+    <div class="nav-item">
+      <a class="nav-btn" href="#/journal" data-route="journal">Журнал</a>
+      <div class="nav-dropdown">
+        <div class="nav-dropdown-inner">
+          <a href="#/journal?kind=actual">📝 Фактический</a>
+          <a href="#/journal">📋 Официальный</a>
+        </div>
+      </div>
+    </div>
     <a class="nav-btn" href="#/enroll"    data-route="enroll">Набор</a>
     <a class="nav-btn" href="#/hours"     data-route="hours">Часы</a>
     <a class="nav-btn" href="#/salary"    data-route="salary">Зарплата</a>

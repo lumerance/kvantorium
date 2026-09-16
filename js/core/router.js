@@ -39,5 +39,8 @@ export function startRouter() {
   paint();
 }
 
-export function go(name) { location.hash = `#/${name}`; }
+export function go(name, params) {
+  const qs = params && Object.keys(params).length ? '?' + new URLSearchParams(params).toString() : '';
+  location.hash = `#/${name}${qs}`;
+}
 export function repaint() { paint(); }

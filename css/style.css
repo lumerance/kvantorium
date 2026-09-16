@@ -84,6 +84,26 @@ body{
   color:#04120a;background:linear-gradient(180deg,var(--neon),var(--neon-dim));
   border-color:transparent;box-shadow:0 0 22px rgba(43,255,139,.45);
 }
+/* пункт навигации с выпадающим списком (Журнал: Фактический / Официальный) */
+.nav-item{position:relative}
+.nav-dropdown{
+  position:absolute;top:100%;left:0;padding-top:8px;z-index:60;
+  opacity:0;visibility:hidden;transform:translateY(-6px);
+  transition:opacity .18s,transform .18s,visibility .18s;
+}
+.nav-item:hover .nav-dropdown,.nav-item:focus-within .nav-dropdown{
+  opacity:1;visibility:visible;transform:translateY(0);
+}
+.nav-dropdown-inner{
+  min-width:180px;background:#0a1017;border:1px solid var(--line);border-radius:12px;padding:6px;
+  box-shadow:0 14px 32px rgba(0,0,0,.5),0 0 20px rgba(43,255,139,.12);
+}
+.nav-dropdown-inner a{
+  display:block;padding:9px 12px;border-radius:8px;color:var(--muted);
+  font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;
+  transition:color .18s,background .18s;
+}
+.nav-dropdown-inner a:hover{color:var(--neon);background:rgba(43,255,139,.08)}
 /* ================= LAYOUT ================= */
 .view{position:relative;z-index:1;max-width:1500px;margin:0 auto;padding:26px 22px 90px}
 .page{animation:pageIn .38s cubic-bezier(.22,.9,.3,1) both}

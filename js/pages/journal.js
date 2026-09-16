@@ -1,14 +1,25 @@
 // Электронный журнал: заезды → предметы → группы (вкладки), отметки и средние баллы.
+//
+// Два независимых журнала — «Официальный» (сетевые документы школ: st.students /
+// schedules / mapping / journal) и «Фактический» (реальный состав и расписание,
+// если отличаются от официальных: st.actual.*) — переключаются выпадающим
+// списком под кнопкой «Журнал» в шапке (адрес отличается ?kind=actual).
+// У них разные списки детей и расписания, но часть детей совпадает по ФИО —
+// кнопка «Перенести из Фактического» на официальном журнале переносит средний
+// балл за заезд для совпавших учеников как ручную правку в st.vedomostMarks
+// (её же понимает «Итоговая ведомость» — см. js/pages/vedomost.js), не трогая
+// сами отметки официального журнала.
 import { h, toast, dateRu, download, emptyState, WEEKDAY_SHORT, modal } from '../core/ui.js';
 import { getState, update, lessonsForGroup, lessonsForCode, lessonKey } from '../core/store.js';
 import { go } from '../core/router.js';
 
 export const SHIFTS = [1, 2, 3];
 // Группы «Набора» (дополнительное образование, которые педагог набирает сам)
-// показываются в журнале как ещё один псевдо-предмет рядом с сетевыми —
-// занятия для них берутся напрямую по коду расписания, а не через st.mapping.
+// показываются только в официальном журнале как ещё один псевдо-предмет —
+// занятия для них берутся напрямую по коду расписания, а не через mapping.
 export const ENROLL_SUBJECT_ID = '__enroll__';
 const shortName = (fio) => (fio || '').trim().split(/\s+/).slice(0, 2).join(' ');
+const matchKey = (fio) => shortName(fio).toLowerCase();
 
 function enrollAsSubject(st) {
   const groups = (st.enroll?.groups || []).map(g => ({
@@ -30,24 +41,47 @@ function avgOf(marks) {
 const avgClass = (v) => v === null ? 'none' : v >= 4.5 ? 'g5' : v >= 3.5 ? 'g4' : v >= 2.5 ? 'g3' : 'g2';
 const fmtAvg = (v) => v === null ? '—' : v.toFixed(2);
 
-/** Все оценки ученика за все заезды. */
-function allMarksOfStudent(st, groupId, studentId) {
+/** Все оценки ученика за все заезды в данном журнале (root — st или st.actual). */
+function allMarksOfStudent(root, groupId, studentId) {
   const out = [];
   for (const sh of SHIFTS) {
-    const cell = st.journal?.[sh]?.[groupId]?.[studentId];
+    const cell = root.journal?.[sh]?.[groupId]?.[studentId];
     if (cell) out.push(...Object.values(cell));
   }
   return out;
 }
 
-export function render(root) {
+/** Средний балл ученика за конкретный заезд в данном журнале, или null. */
+function shiftAvgOfStudent(root, groupId, studentId, shift) {
+  const cell = root.journal?.[shift]?.[groupId]?.[studentId];
+  return cell ? avgOf(Object.values(cell)) : null;
+}
+
+/** Плоский список {subject, group, student} по всем предметам списка обучающихся. */
+function flatStudents(root) {
+  const out = [];
+  for (const sub of root.students?.subjects || []) {
+    for (const g of sub.groups) for (const stu of g.students) out.push({ subject: sub, group: g, student: stu });
+  }
+  return out;
+}
+
+export function render(root, params = {}) {
+  const kind = params.kind === 'actual' ? 'actual' : 'official';
+  const isActual = kind === 'actual';
+  const journalRoot = (st) => (isActual ? st.actual : st);
+  const uiShiftKey = isActual ? 'actualJournalShift' : 'journalShift';
+  const uiSubjectKey = isActual ? 'actualJournalSubject' : 'journalSubject';
+  const uiGroupKey = isActual ? 'actualJournalGroup' : 'journalGroup';
+  const kindTitle = isActual ? 'Фактический' : 'Официальный';
+
   const wrap = h('div', {});
   root.append(wrap);
   let brush = '✓';
 
   function setMark(shift, groupId, studentId, key, mark) {
     update(x => {
-      const j = x.journal;
+      const j = journalRoot(x).journal;
       j[shift] = j[shift] || {};
       j[shift][groupId] = j[shift][groupId] || {};
       j[shift][groupId][studentId] = j[shift][groupId][studentId] || {};
@@ -58,60 +92,68 @@ export function render(root) {
 
   function redraw() {
     const st = getState();
+    const data = journalRoot(st);
     wrap.innerHTML = '';
 
-    const realSubjects = st.students?.subjects || [];
-    const enrollGroups = st.enroll?.groups || [];
+    const realSubjects = data.students?.subjects || [];
+    const enrollGroups = isActual ? [] : (st.enroll?.groups || []);
     if (!realSubjects.length && !enrollGroups.length) {
-      wrap.append(h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Электронный журнал'))));
+      wrap.append(h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, `Электронный журнал · ${kindTitle}`))));
       wrap.append(h('div', { class: 'card' }, emptyState('📋',
-        'Список обучающихся ещё не загружен. Импортируйте docx со списком детей и docx с расписанием — либо заведите группу дополнительного образования на вкладке «Набор».',
+        isActual
+          ? 'Фактический список обучающихся ещё не загружен. Импортируйте свой docx со списком детей и docx с реальным расписанием — отдельно от официальных документов.'
+          : 'Список обучающихся ещё не загружен. Импортируйте docx со списком детей и docx с расписанием — либо заведите группу дополнительного образования на вкладке «Набор».',
         h('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' } },
-          h('button', { class: 'btn primary', onClick: () => go('data') }, 'Перейти к импорту'),
-          h('button', { class: 'btn', onClick: () => go('enroll') }, 'Открыть «Набор»')))));
+          h('button', { class: 'btn primary', onClick: () => go('data', isActual ? { kind: 'actual' } : undefined) }, 'Перейти к импорту'),
+          isActual ? null : h('button', { class: 'btn', onClick: () => go('enroll') }, 'Открыть «Набор»')))));
       return;
     }
 
     const ui = st.ui;
-    const shift = ui.journalShift || 1;
+    const shift = ui[uiShiftKey] || 1;
     const subjects = enrollGroups.length ? [...realSubjects, enrollAsSubject(st)] : realSubjects;
-    let subject = subjects.find(s => s.id === ui.journalSubject) || subjects[0];
-    let group = subject.groups.find(g => g.id === ui.journalGroup) || subject.groups[0];
+    let subject = subjects.find(s => s.id === ui[uiSubjectKey]) || subjects[0];
+    let group = subject.groups.find(g => g.id === ui[uiGroupKey]) || subject.groups[0];
 
-    const sched = st.schedules[String(shift)];
-    const lessons = subject.isEnroll ? lessonsForCode(shift, group.code, st) : lessonsForGroup(shift, group.id, st);
+    const sched = data.schedules[String(shift)];
+    const lessons = subject.isEnroll ? lessonsForCode(shift, group.code, st) : lessonsForGroup(shift, group.id, st, kind);
+    const canTransfer = !isActual && !subject.isEnroll && (st.actual?.students?.subjects || []).length > 0;
 
     wrap.append(h('div', { class: 'page-head' },
       h('div', {},
-        h('h1', {}, 'Электронный журнал'),
+        h('h1', {}, `Электронный журнал · ${kindTitle}`),
         h('p', {}, `${subject.title} · ${group.name} · ${group.students.length} чел.` +
           (sched ? ` · расписание ${shift} заезда: ${sched.lessons.length} занятий` : ' · расписание заезда не загружено'))),
       h('div', { class: 'head-actions' },
         h('button', { class: 'btn', onClick: () => markAllPresent(shift, group, lessons) }, '✓ Все присутствуют'),
-        h('button', { class: 'btn', onClick: () => exportJournal(st, subject, group, shift, lessons) }, '⤓ Экспорт CSV'),
-        subject.isEnroll ? null : h('button', { class: 'btn primary', onClick: () => openVedomost(subject) }, '📄 Создание ведомости'),
-        h('button', { class: 'btn', onClick: () => go(subject.isEnroll ? 'enroll' : 'data') }, subject.isEnroll ? '⚙ Набор' : '⚙ Данные'),
+        h('button', { class: 'btn', onClick: () => exportJournal(data, subject, group, shift, lessons) }, '⤓ Экспорт CSV'),
+        canTransfer ? h('button', { class: 'btn', onClick: () => openTransferDialog(redraw) }, '🔁 Перенести из Фактического') : null,
+        (subject.isEnroll || isActual) ? null : h('button', { class: 'btn primary', onClick: () => openVedomost(subject) }, '📄 Создание ведомости'),
+        h('button', {
+          class: 'btn',
+          onClick: () => go(subject.isEnroll ? 'enroll' : 'data', (!subject.isEnroll && isActual) ? { kind: 'actual' } : undefined),
+        }, subject.isEnroll ? '⚙ Набор' : '⚙ Данные'),
       )));
 
     /* --- вкладки заездов --- */
     wrap.append(h('div', { class: 'tabs' }, ...SHIFTS.map(s => {
-      const sc = st.schedules[String(s)];
+      const sc = data.schedules[String(s)];
       return h('button', {
         class: 'tab' + (s === shift ? ' active' : ''),
-        onClick: () => { update(x => { x.ui.journalShift = s; }); redraw(); }
+        onClick: () => { update(x => { x.ui[uiShiftKey] = s; }); redraw(); }
       }, `${s} заезд`, h('span', { class: 'badge' }, sc ? `${sc.lessons.length}` : '—'));
     })));
 
     /* --- вкладки предметов --- */
     wrap.append(h('div', { class: 'tabs sub' }, ...subjects.map(s => h('button', {
       class: 'tab' + (s.id === subject.id ? ' active' : ''),
-      onClick: () => { update(x => { x.ui.journalSubject = s.id; x.ui.journalGroup = s.groups[0]?.id; }); redraw(); }
+      onClick: () => { update(x => { x.ui[uiSubjectKey] = s.id; x.ui[uiGroupKey] = s.groups[0]?.id; }); redraw(); }
     }, s.title))));
 
     /* --- вкладки групп --- */
     wrap.append(h('div', { class: 'tabs sub' }, ...subject.groups.map(g => h('button', {
       class: 'tab' + (g.id === group.id ? ' active' : ''),
-      onClick: () => { update(x => { x.ui.journalGroup = g.id; }); redraw(); }
+      onClick: () => { update(x => { x.ui[uiGroupKey] = g.id; }); redraw(); }
     }, g.name, h('span', { class: 'badge' }, g.students.length)))));
 
     /* --- панель отметок --- */
@@ -143,7 +185,7 @@ export function render(root) {
     if (!sched) {
       wrap.append(h('div', { class: 'card' }, emptyState('🗓',
         `Расписание ${shift} заезда не загружено.`,
-        h('button', { class: 'btn primary', onClick: () => go('data') }, 'Загрузить расписание'))));
+        h('button', { class: 'btn primary', onClick: () => go('data', isActual ? { kind: 'actual' } : undefined) }, 'Загрузить расписание'))));
       return;
     }
     if (!lessons.length) {
@@ -155,15 +197,15 @@ export function render(root) {
           h('button', { class: 'btn primary', onClick: () => go('enroll') }, 'Привязать код в «Наборе»'))));
         return;
       }
-      const mapped = Object.entries(st.mapping).filter(([, m]) => m?.groupId === group.id).length;
+      const mapped = Object.entries(data.mapping).filter(([, m]) => m?.groupId === group.id).length;
       wrap.append(h('div', { class: 'card' }, emptyState('🔗',
         mapped ? `В расписании ${shift} заезда нет занятий для этой группы.`
                : `Группа «${group.name}» не сопоставлена ни с одним кодом расписания (например «Т1 РШ7»).`,
-        h('button', { class: 'btn primary', onClick: () => go('data') }, 'Настроить сопоставление'))));
+        h('button', { class: 'btn primary', onClick: () => go('data', isActual ? { kind: 'actual' } : undefined) }, 'Настроить сопоставление'))));
       return;
     }
 
-    wrap.append(journalTable(st, subject, group, shift, lessons, setMark, redraw, () => brush));
+    wrap.append(journalTable(data, subject, group, shift, lessons, setMark, redraw, () => brush));
   }
 
   /** Открывает ведомость, предварительно выбрав группы текущего предмета. */
@@ -180,7 +222,7 @@ export function render(root) {
   function markAllPresent(shift, group, lessons) {
     if (!lessons.length) return toast('Нет занятий для отметки', 'err');
     update(x => {
-      const j = x.journal;
+      const j = journalRoot(x).journal;
       j[shift] = j[shift] || {}; j[shift][group.id] = j[shift][group.id] || {};
       for (const st of group.students) {
         const cell = j[shift][group.id][st.id] = j[shift][group.id][st.id] || {};
@@ -191,11 +233,97 @@ export function render(root) {
     redraw();
   }
 
+  /**
+   * Перенос оценок из Фактического журнала в Официальный: сравнивает детей
+   * по ключу «фамилия имя» (без учёта регистра), для совпавших считает
+   * средний балл за заезд по Фактическому журналу и предлагает записать его
+   * как ручную правку в «Итоговую ведомость» (st.vedomostMarks) — сама
+   * официальная ведомость строится из vedomostMarks/журнала, поэтому это
+   * ровно то же самое, что поправить оценку в ведомости руками. Отметки
+   * официального журнала (посещаемость по занятиям) не меняются — расписания
+   * у журналов разные, переносить по занятиям один в один нельзя.
+   */
+  function openTransferDialog(redraw) {
+    const st = getState();
+    const officialList = flatStudents(st);
+    const actualList = flatStudents(st.actual);
+    if (!actualList.length) return toast('В Фактическом журнале нет ни одного ученика', 'err');
+
+    const actualByKey = new Map();
+    for (const row of actualList) {
+      const key = matchKey(row.student.fio);
+      if (!actualByKey.has(key)) actualByKey.set(key, []);
+      actualByKey.get(key).push(row);
+    }
+
+    const matches = [];
+    for (const row of officialList) {
+      const candidates = actualByKey.get(matchKey(row.student.fio));
+      if (!candidates?.length) continue;
+      const fact = candidates[0];
+      const rounded = {};
+      for (const sh of SHIFTS) {
+        const avg = shiftAvgOfStudent(st.actual, fact.group.id, fact.student.id, sh);
+        if (avg !== null) rounded[sh] = String(Math.round(avg));
+      }
+      if (!Object.keys(rounded).length) continue;
+      matches.push({ official: row, fact, rounded, ambiguous: candidates.length > 1 });
+    }
+
+    if (!matches.length) {
+      toast('Совпадений по ФИО с оценками в Фактическом журнале не найдено', 'err');
+      return;
+    }
+
+    const checked = new Set(matches.map((_, i) => i));
+    const body = h('div', {});
+    body.append(h('p', { class: 'muted', style: { marginTop: 0 } },
+      'Совпадение — по «Фамилия Имя» без учёта регистра. Переносится округлённый средний балл за заезд как ручная правка в «Итоговой ведомости»: отметки официального журнала не меняются, а результат виден там же вместо «авто».'));
+
+    const rows = matches.map((m, i) => {
+      const cb = h('input', {
+        type: 'checkbox', checked: true, style: { width: 'auto', margin: 0 },
+        onChange: (e) => { e.target.checked ? checked.add(i) : checked.delete(i); },
+      });
+      return h('tr', {},
+        h('td', {}, cb),
+        h('td', {}, m.official.student.short || m.official.student.fio,
+          m.ambiguous ? h('span', { class: 'pill warn', style: { marginLeft: '6px' } }, '⚠ неск. совпадений') : null),
+        h('td', { class: 'muted', style: { fontSize: '12px' } }, `${m.official.subject.title} · ${m.official.group.name}`),
+        h('td', { class: 'muted', style: { fontSize: '12px' } }, `${m.fact.subject.title} · ${m.fact.group.name}`),
+        ...SHIFTS.map(sh => h('td', { class: 'num mono' }, m.rounded[sh] ?? '—')));
+    });
+
+    body.append(h('div', { class: 'table-wrap' }, h('table', { class: 'compact' },
+      h('thead', {}, h('tr', {},
+        h('th', {}, ''), h('th', {}, 'Официальный ученик'), h('th', {}, 'Официальная группа'), h('th', {}, 'Найден в Фактическом'),
+        ...SHIFTS.map(sh => h('th', { class: 'num' }, `${sh} заезд`)))),
+      h('tbody', {}, ...rows))));
+
+    modal({
+      wide: true, title: `Перенос оценок из Фактического · совпадений: ${matches.length}`,
+      body, okText: 'Перенести отмеченные',
+      onOk: () => {
+        if (!checked.size) { toast('Ничего не отмечено', 'err'); return false; }
+        update(x => {
+          x.vedomostMarks = x.vedomostMarks || {};
+          for (const i of checked) {
+            const m = matches[i];
+            const rec = x.vedomostMarks[m.official.student.id] = x.vedomostMarks[m.official.student.id] || {};
+            for (const sh of SHIFTS) if (m.rounded[sh] !== undefined) rec[sh] = m.rounded[sh];
+          }
+        });
+        toast(`Оценки перенесены: ${checked.size} учеников`);
+        redraw();
+      },
+    });
+  }
+
   redraw();
 }
 
-function journalTable(st, subject, group, shift, lessons, setMark, redraw, getBrush) {
-  const jGroup = st.journal?.[shift]?.[group.id] || {};
+function journalTable(data, subject, group, shift, lessons, setMark, redraw, getBrush) {
+  const jGroup = data.journal?.[shift]?.[group.id] || {};
 
   const thead = h('thead', {},
     h('tr', {},
@@ -216,12 +344,12 @@ function journalTable(st, subject, group, shift, lessons, setMark, redraw, getBr
     const avg3Cell = shift === 3 ? h('td', { class: 'num' }) : null;
 
     const refreshAvg = () => {
-      const cur = getState().journal?.[shift]?.[group.id]?.[s.id] || {};
+      const cur = data.journal?.[shift]?.[group.id]?.[s.id] || {};
       const v = avgOf(lessons.map(l => cur[lessonKey(l)]));
       avgCell.innerHTML = '';
       avgCell.append(h('span', { class: 'avg ' + avgClass(v) }, fmtAvg(v)));
       if (avg3Cell) {
-        const v3 = avgOf(allMarksOfStudent(getState(), group.id, s.id));
+        const v3 = avgOf(allMarksOfStudent(data, group.id, s.id));
         avg3Cell.innerHTML = '';
         avg3Cell.append(h('span', { class: 'avg ' + avgClass(v3) }, fmtAvg(v3)));
       }
@@ -242,7 +370,7 @@ function journalTable(st, subject, group, shift, lessons, setMark, redraw, getBr
         };
         btn.addEventListener('click', () => {
           const brush = getBrush();
-          const cur = getState().journal?.[shift]?.[group.id]?.[s.id]?.[k] || '';
+          const cur = data.journal?.[shift]?.[group.id]?.[s.id]?.[k] || '';
           if (brush === null) apply(CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length]);
           else apply(cur === brush ? '' : brush);
         });
@@ -274,8 +402,8 @@ function journalTable(st, subject, group, shift, lessons, setMark, redraw, getBr
       'Клик по клетке ставит выбранную кисть (повторный клик той же отметкой — снимает), правая кнопка мыши — очистить. Средний балл считается только по оценкам 2–5.'));
 }
 
-function exportJournal(st, subject, group, shift, lessons) {
-  const jGroup = st.journal?.[shift]?.[group.id] || {};
+function exportJournal(data, subject, group, shift, lessons) {
+  const jGroup = data.journal?.[shift]?.[group.id] || {};
   const head = ['№', 'Фамилия Имя', ...lessons.map(l => `${dateRu(l.date)} ${l.no}ур`), 'Средний балл'];
   if (shift === 3) head.push('Средний за 3 заезда');
   const rows = [[`${subject.title} — ${group.name} — ${shift} заезд`], head];
@@ -285,7 +413,7 @@ function exportJournal(st, subject, group, shift, lessons) {
     const v = avgOf(marks);
     const row = [i + 1, s.short || s.fio, ...marks, v === null ? '' : v.toFixed(2).replace('.', ',')];
     if (shift === 3) {
-      const v3 = avgOf(allMarksOfStudent(st, group.id, s.id));
+      const v3 = avgOf(allMarksOfStudent(data, group.id, s.id));
       row.push(v3 === null ? '' : v3.toFixed(2).replace('.', ','));
     }
     rows.push(row);

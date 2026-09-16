@@ -52,10 +52,24 @@ export const DEFAULTS = {
   // Группы дополнительного образования: набор ведёт сам педагог (У1, Д2 …),
   // состав правится вручную, у каждого ребёнка два факта — договор и Навигатор.
   enroll: { groups: [] },       // [{id, name, program, note, createdAt, students:[...]}]
+  // «Фактический» журнал — параллельный набор списка/расписания/журнала того
+  // же вида, что и основной (официальный): свой импорт, свои группы, свои
+  // отметки. Нужен, когда реальный состав занятий отличается от официальных
+  // сетевых документов — фамилии в обоих журналах могут совпадать, тогда
+  // оценки переносятся кнопкой на официальном журнале (см. js/pages/journal.js).
+  actual: {
+    students: null,
+    schedules: {},
+    mapping: {},
+    journal: {},
+  },
   vedomostHeader: {},           // шапка итоговой ведомости
   vedomostGroups: [],           // группы, попадающие в ведомость
   vedomostMarks: {},            // ручные правки оценок: studentId -> {1,2,3,final}
-  ui: { journalShift: 1, journalSubject: null, journalGroup: null, salaryTab: 'calc' },
+  ui: {
+    journalShift: 1, journalSubject: null, journalGroup: null, salaryTab: 'calc',
+    actualJournalShift: 1, actualJournalSubject: null, actualJournalGroup: null,
+  },
 };
 
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -117,16 +131,23 @@ export function importBackup(json) {
 }
 
 /* ---------- удобные выборки ---------- */
-export function allGroups(st = state) {
+// Почти все функции ниже принимают необязательный kind: 'actual' — работать с
+// «Фактическим» журналом (st.actual.*) вместо основного «Официального»
+// (st.* напрямую). Опущенный kind = официальный, так что все существующие
+// вызовы без него ведут себя ровно как раньше.
+const ns = (st, kind) => (kind === 'actual' ? st.actual : st);
+
+export function allGroups(st = state, kind = null) {
+  const root = ns(st, kind);
   const out = [];
-  for (const s of st.students?.subjects || []) {
+  for (const s of root.students?.subjects || []) {
     for (const g of s.groups) out.push({ subject: s, group: g });
   }
   return out;
 }
 
-export function findGroup(groupId, st = state) {
-  return allGroups(st).find(x => x.group.id === groupId) || null;
+export function findGroup(groupId, st = state, kind = null) {
+  return allGroups(st, kind).find(x => x.group.id === groupId) || null;
 }
 
 /**
@@ -135,18 +156,20 @@ export function findGroup(groupId, st = state) {
  * st.mapping (он только для сетевых предметов из списка обучающихся), код
  * привязывается прямо к записи группы в st.enroll.groups.
  */
-export function lessonsForCode(shift, code, st = state) {
-  const sch = st.schedules[String(shift)];
+export function lessonsForCode(shift, code, st = state, kind = null) {
+  const root = ns(st, kind);
+  const sch = root.schedules[String(shift)];
   if (!sch || !code) return [];
   return sch.lessons.filter(l => l.code === code)
     .sort((a, b) => a.date.localeCompare(b.date) || a.no - b.no);
 }
 
 /** Занятия конкретной группы в заезде — по сопоставленным кодам расписания. */
-export function lessonsForGroup(shift, groupId, st = state) {
-  const sch = st.schedules[String(shift)];
+export function lessonsForGroup(shift, groupId, st = state, kind = null) {
+  const root = ns(st, kind);
+  const sch = root.schedules[String(shift)];
   if (!sch) return [];
-  const codes = Object.entries(st.mapping).filter(([, m]) => m && m.groupId === groupId).map(([c]) => c);
+  const codes = Object.entries(root.mapping).filter(([, m]) => m && m.groupId === groupId).map(([c]) => c);
   if (!codes.length) return [];
   const set = new Set(codes);
   return sch.lessons.filter(l => set.has(l.code))
@@ -158,55 +181,61 @@ export const lessonKey = (l) => `${l.date}#${l.no}`;
 /* ---------- удаление лишних групп и занятий ---------- */
 
 /** Пересчитывает сводку по спискам обучающихся. */
-export function recalcStudentStats(st = state) {
-  const subs = st.students?.subjects || [];
-  if (!st.students) return;
-  st.students.stats = {
+export function recalcStudentStats(st = state, kind = null) {
+  const root = ns(st, kind);
+  const subs = root.students?.subjects || [];
+  if (!root.students) return;
+  root.students.stats = {
     subjects: subs.length,
     groups: subs.reduce((a, s) => a + s.groups.length, 0),
     students: subs.reduce((a, s) => a + s.groups.reduce((b, g) => b + g.students.length, 0), 0),
   };
 }
 
-/** Убирает следы группы из журнала, сопоставления и ведомости. */
-function purgeGroup(st, groupId) {
-  for (const sh of Object.keys(st.journal || {})) delete st.journal[sh]?.[groupId];
-  for (const [code, m] of Object.entries(st.mapping || {})) if (m?.groupId === groupId) delete st.mapping[code];
-  st.vedomostGroups = (st.vedomostGroups || []).filter(id => id !== groupId);
+/** Убирает следы группы из журнала, сопоставления и (для официального) ведомости. */
+function purgeGroup(st, groupId, kind) {
+  const root = ns(st, kind);
+  for (const sh of Object.keys(root.journal || {})) delete root.journal[sh]?.[groupId];
+  for (const [code, m] of Object.entries(root.mapping || {})) if (m?.groupId === groupId) delete root.mapping[code];
+  if (kind !== 'actual') st.vedomostGroups = (st.vedomostGroups || []).filter(id => id !== groupId);
 }
 
 /** Оставляет только перечисленные группы (по id); предметы без групп удаляются. */
-export function keepGroups(keepIds) {
+export function keepGroups(keepIds, kind = null) {
   const keep = new Set(keepIds);
   update(st => {
-    for (const sub of st.students?.subjects || []) {
-      for (const g of sub.groups) if (!keep.has(g.id)) purgeGroup(st, g.id);
+    const root = ns(st, kind);
+    for (const sub of root.students?.subjects || []) {
+      for (const g of sub.groups) if (!keep.has(g.id)) purgeGroup(st, g.id, kind);
       sub.groups = sub.groups.filter(g => keep.has(g.id));
     }
-    if (st.students) st.students.subjects = st.students.subjects.filter(s => s.groups.length);
-    recalcStudentStats(st);
-    if (!allGroups(st).some(x => x.group.id === st.ui.journalGroup)) {
-      const first = allGroups(st)[0];
-      st.ui.journalSubject = first?.subject.id || null;
-      st.ui.journalGroup = first?.group.id || null;
+    if (root.students) root.students.subjects = root.students.subjects.filter(s => s.groups.length);
+    recalcStudentStats(st, kind);
+    const subjKey = kind === 'actual' ? 'actualJournalSubject' : 'journalSubject';
+    const grpKey = kind === 'actual' ? 'actualJournalGroup' : 'journalGroup';
+    if (!allGroups(st, kind).some(x => x.group.id === st.ui[grpKey])) {
+      const first = allGroups(st, kind)[0];
+      st.ui[subjKey] = first?.subject.id || null;
+      st.ui[grpKey] = first?.group.id || null;
     }
   });
 }
 
-export function removeGroup(groupId) {
-  const keep = allGroups().filter(x => x.group.id !== groupId).map(x => x.group.id);
-  keepGroups(keep);
+export function removeGroup(groupId, kind = null) {
+  const keep = allGroups(state, kind).filter(x => x.group.id !== groupId).map(x => x.group.id);
+  keepGroups(keep, kind);
 }
 
-export function removeSubject(subjectId) {
-  const keep = allGroups().filter(x => x.subject.id !== subjectId).map(x => x.group.id);
-  keepGroups(keep);
+export function removeSubject(subjectId, kind = null) {
+  const keep = allGroups(state, kind).filter(x => x.subject.id !== subjectId).map(x => x.group.id);
+  keepGroups(keep, kind);
 }
 
 /** Оставляет в расписании заезда только занятия выбранных педагогов и кодов. */
-export function filterSchedule(shift, { teachers, codes } = {}) {
+export function filterSchedule(shift, { teachers, codes } = {}, kind = null) {
   update(st => {
-    const sc = st.schedules[String(shift)];
+    const root = ns(st, kind);
+    const sc = root.schedules[String(shift)];
     if (!sc) return;
     const tSet = teachers ? new Set(teachers) : null;
     const cSet = codes ? new Set(codes) : null;
