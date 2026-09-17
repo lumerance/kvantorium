@@ -77,14 +77,16 @@ function knownFio(st, kind) {
   return [...out].sort();
 }
 
+/** Создаёт группу/класс, возвращает её id или null при ошибке (имя пустое/занято). */
 function addGroup(name, program = '', code = null, kind = 'official') {
   const clean = norm(name);
-  if (!clean) return toast('Впишите название группы', 'err');
-  if (groupsOf(getState(), kind).some(g => g.name.toLowerCase() === clean.toLowerCase())) return toast(`Группа «${clean}» уже есть`, 'err');
+  if (!clean) { toast('Впишите название группы', 'err'); return null; }
+  if (groupsOf(getState(), kind).some(g => g.name.toLowerCase() === clean.toLowerCase())) { toast(`Группа «${clean}» уже есть`, 'err'); return null; }
+  const id = nextId('eg_');
   update(x => {
-    dataOf(x, kind).groups.push({ id: nextId('eg_'), name: clean, program: norm(program), code: code || null, createdAt: new Date().toISOString(), students: [] });
+    dataOf(x, kind).groups.push({ id, name: clean, program: norm(program), code: code || null, createdAt: new Date().toISOString(), students: [] });
   });
-  return true;
+  return id;
 }
 
 /** Сколько занятий по коду набежало во всех загруженных заездах — подсказка при выборе кода. */
@@ -111,7 +113,8 @@ export function render(root, params = {}) {
   root.append(wrap);
   let kind = params.kind === 'actual' ? 'actual' : 'official';
   let totalsBox = null;
-  const cards = new Map();   // groupId -> элемент карточки
+  const cards = new Map();      // groupId -> элемент карточки
+  const expanded = new Set();   // groupId раскрытых панелей — по умолчанию все свёрнуты
 
   redraw();
 
@@ -138,7 +141,7 @@ export function render(root, params = {}) {
 
     totalsBox = totalsCard(st, kind, isDO);
     wrap.append(totalsBox);
-    wrap.append(addCard(st, redraw, kind, isDO));
+    wrap.append(addCard(st, redraw, kind, isDO, onGroupCreated));
 
     if (!groupsOf(st, kind).length) {
       wrap.append(h('div', { class: 'card' }, emptyState('👥',
@@ -156,7 +159,10 @@ export function render(root, params = {}) {
   /** Карточка группы + её замена на месте, без перерисовки всей страницы. */
   function mountCard(g, focusAdd = false) {
     const isDO = kind === 'official';
-    const card = groupCard(g, { refresh: () => remount(g.id, true), reload: redraw, refreshTotals, kind, isDO });
+    if (focusAdd) expanded.add(g.id);
+    const isOpen = expanded.has(g.id);
+    const toggle = () => { isOpen ? expanded.delete(g.id) : expanded.add(g.id); remount(g.id); };
+    const card = groupCard(g, { refresh: () => remount(g.id, true), reload: redraw, refreshTotals, kind, isDO, isOpen, toggle });
     cards.set(g.id, card);
     if (focusAdd) requestAnimationFrame(() => card.querySelector('.add-fio')?.focus());
     return card;
@@ -170,6 +176,12 @@ export function render(root, params = {}) {
     const nw = mountCard(fresh, focusAdd);
     old.replaceWith(nw);
     refreshTotals();
+  }
+
+  /** Новая группа/класс сразу раскрывается и фокусирует поле ввода ребёнка. */
+  function onGroupCreated(groupId) {
+    expanded.add(groupId);
+    remount(groupId, true);
   }
 
   function refreshTotals() {
@@ -208,7 +220,7 @@ function totalsCard(st, kind, isDO) {
 }
 
 /* ---------------- создание групп ---------------- */
-function addCard(st, redraw, kind, isDO) {
+function addCard(st, redraw, kind, isDO, onGroupCreated) {
   const nameInput = h('input', { type: 'text', placeholder: isDO ? 'например: У1' : 'например: 7А', class: 'mono' });
   const progInput = h('input', { type: 'text', placeholder: 'направление (необязательно)' });
   const create = () => {
@@ -217,10 +229,12 @@ function addCard(st, redraw, kind, isDO) {
     // привязываем группу к нему, чтобы занятия появились в журнале без
     // отдельного шага
     const matchedCode = scheduleCodes(st, kind).find(c => c.toLowerCase() === name.toLowerCase()) || null;
-    if (addGroup(nameInput.value, progInput.value, matchedCode, kind) === true) {
+    const id = addGroup(nameInput.value, progInput.value, matchedCode, kind);
+    if (id) {
       toast(`${isDO ? 'Группа' : 'Класс'} «${name}» ${isDO ? 'создана' : 'создан'}`);
       nameInput.value = ''; progInput.value = '';
       redraw();
+      onGroupCreated(id);   // сразу раскрыть новую панель и дать вписывать детей
     }
   };
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') create(); });
@@ -234,7 +248,10 @@ function addCard(st, redraw, kind, isDO) {
     ...free.map(code => h('button', {
       class: 'btn sm' + (isDO && !isDoCode(code) ? ' ghost muted-btn' : ' ghost'),
       title: programForCode(st, code, kind) || `Создать ${isDO ? 'группу' : 'класс'} с этим названием`,
-      onClick: () => { if (addGroup(code, programForCode(st, code, kind), code, kind) === true) { toast(`${isDO ? 'Группа' : 'Класс'} «${code}» ${isDO ? 'создана' : 'создан'}`); redraw(); } },
+      onClick: () => {
+        const id = addGroup(code, programForCode(st, code, kind), code, kind);
+        if (id) { toast(`${isDO ? 'Группа' : 'Класс'} «${code}» ${isDO ? 'создана' : 'создан'}`); redraw(); onGroupCreated(id); }
+      },
     }, `+ ${code}`)));
 
   return h('div', { class: 'card', style: { marginBottom: '16px' } },
@@ -284,8 +301,8 @@ function codeRow(g, st, refresh, kind) {
     h('button', { class: 'btn sm ghost', onClick: () => openInJournal(g.id, kind) }, '📋 Открыть в журнале'));
 }
 
-/* ---------------- карточка группы ---------------- */
-function groupCard(g, { refresh, reload, refreshTotals, kind, isDO }) {
+/* ---------------- карточка группы: свёрнута по умолчанию, раскрывается по клику ---------------- */
+function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, toggle }) {
   const st = getState();
   const c = counts(g);
 
@@ -308,7 +325,7 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO }) {
     refreshTotals();
   };
 
-  const toggle = (studentId, field) => (e) => {
+  const toggleField = (studentId, field) => (e) => {
     const on = e.target.checked;
     update(x => {
       const gr = dataOf(x, kind).groups.find(y => y.id === g.id);
@@ -333,11 +350,11 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO }) {
     })),
     isDO ? h('td', { style: { textAlign: 'center' } }, h('input', {
       type: 'checkbox', checked: !!s.contract, class: 'box', title: 'Договор сдан',
-      onChange: toggle(s.id, 'contract'),
+      onChange: toggleField(s.id, 'contract'),
     })) : null,
     isDO ? h('td', { style: { textAlign: 'center' } }, h('input', {
       type: 'checkbox', checked: !!s.navigator, class: 'box', title: 'Заявление отправлено в Навигатор',
-      onChange: toggle(s.id, 'navigator'),
+      onChange: toggleField(s.id, 'navigator'),
     })) : null,
     h('td', {}, h('input', {
       type: 'text', value: s.note || '', placeholder: '—', class: 'cell-input muted',
@@ -385,21 +402,27 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO }) {
       h('th', { style: { width: '44px' } }, ''))),
     h('tbody', {}, ...rows)));
 
-  return h('div', { class: 'card', style: { marginBottom: '16px' } },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' } },
-      h('h3', { style: { margin: 0 } }, h('span', { class: 'mono' }, g.name)),
-      sizePill, contractPill, navPill,
-      h('span', { style: { flex: '1 1 auto' } }),
-      h('button', { class: 'btn sm ghost', onClick: () => renameDialog(g, reload, kind, isDO) }, '✎ Переименовать'),
-      h('button', { class: 'btn sm ghost', onClick: () => printElement(printNode([findGroup(g.id, getState(), kind) || g], isDO)) }, '🖨 Печать'),
-      h('button', {
-        class: 'btn sm danger ghost',
-        onClick: () => confirmBox(`Удалить ${isDO ? 'группу' : 'класс'} «${g.name}»${g.students.length ? ` вместе со списком (${g.students.length} чел.)` : ''}?`, () => {
-          update(x => { dataOf(x, kind).groups = dataOf(x, kind).groups.filter(y => y.id !== g.id); });
-          toast(`${isDO ? 'Группа' : 'Класс'} удалён${isDO ? 'а' : ''}`);
-          reload();
-        })
-      }, '🗑')),
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  const head = h('div', {
+    style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', cursor: 'pointer' },
+    onClick: toggle,
+  },
+    h('span', { class: 'muted', style: { fontSize: '12px', width: '10px', display: 'inline-block' } }, isOpen ? '▾' : '▸'),
+    h('h3', { style: { margin: 0 } }, h('span', { class: 'mono' }, g.name)),
+    sizePill, contractPill, navPill,
+    h('span', { style: { flex: '1 1 auto' } }),
+    h('button', { class: 'btn sm ghost', onClick: stop(() => renameDialog(g, reload, kind, isDO)) }, '✎ Переименовать'),
+    h('button', { class: 'btn sm ghost', onClick: stop(() => printElement(printNode([findGroup(g.id, getState(), kind) || g], isDO))) }, '🖨 Печать'),
+    h('button', {
+      class: 'btn sm danger ghost',
+      onClick: stop(() => confirmBox(`Удалить ${isDO ? 'группу' : 'класс'} «${g.name}»${g.students.length ? ` вместе со списком (${g.students.length} чел.)` : ''}?`, () => {
+        update(x => { dataOf(x, kind).groups = dataOf(x, kind).groups.filter(y => y.id !== g.id); });
+        toast(`${isDO ? 'Группа' : 'Класс'} удалён${isDO ? 'а' : ''}`);
+        reload();
+      }))
+    }, '🗑'));
+
+  const body = isOpen ? h('div', { style: { marginTop: '10px' } },
     g.program ? h('div', { class: 'card-sub', style: { marginTop: 0 } }, g.program) : null,
     codeRow(g, st, refresh, kind),
     c.n ? table : h('p', { class: 'muted', style: { fontSize: '13px', margin: '10px 0' } }, 'Пока пусто — впишите первого ребёнка ниже.'),
@@ -412,7 +435,9 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO }) {
         : c.n > MAX_SIZE ? `Перебор: в группе на ${c.n - MAX_SIZE} чел. больше нормы ${MIN_SIZE}–${MAX_SIZE}.`
           : `Наполняемость в норме (${MIN_SIZE}–${MAX_SIZE} чел.). Enter в поле ввода добавляет следующего.`)
       : h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } }, 'Enter в поле ввода добавляет следующего ребёнка.'),
-  );
+  ) : null;
+
+  return h('div', { class: 'card', style: { marginBottom: '16px' } }, head, body);
 }
 
 function renameDialog(g, reload, kind, isDO) {
