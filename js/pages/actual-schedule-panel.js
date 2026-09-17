@@ -71,14 +71,19 @@ function knownCodes(st) {
 }
 
 /**
+ * Открывается в модальном окне со страницы «Данные» (см. js/pages/data.js) —
+ * сама панель занимает не больше места, чем нужно для формы и списка дней
+ * выбранного заезда: остальные заезды свёрнуты, каждый день внутри тоже
+ * свёрнут в строку и раскрывается по клику, а не висит колонкой карточек.
  * @param {() => void} outerRedraw redraw() всей страницы «Данные» — вызывается
  * после сохранения/удаления дня, чтобы карточка «Сопоставление групп» ниже
  * увидела новые коды (сама панель перерисовывает только себя).
  */
 export function actualScheduleCard(outerRedraw) {
-  const wrap = h('div', { style: { marginBottom: '16px' } });
+  const wrap = h('div', {});
   let lastShift = 1;
   let draft = null;  // { date, shift, lessons:[{no,time,code,dir,teacher}], editKey:{shift,date}|null }
+  const expanded = new Set();  // "заезд|дата" уже раскрытых дней
 
   function freshDraft() {
     draft = { date: addDaysISO(todayISO(), 1), shift: lastShift, lessons: [], editKey: null };
@@ -89,14 +94,16 @@ export function actualScheduleCard(outerRedraw) {
 
   function render() {
     wrap.innerHTML = '';
-    wrap.append(h('h2', { style: { fontSize: '16px', margin: '0 0 10px' } }, '2. Расписание по дням'));
     wrap.append(h('div', { class: 'card', style: { marginBottom: '14px' } }, formBody()));
-    const days = allDays(getState());
+    const days = allDays(getState()).filter(d => d.shift === draft.shift);
+    wrap.append(h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0 10px' } },
+      h('h3', { style: { fontSize: '14px', margin: 0 } }, `Внесённые дни · ${draft.shift} заезд`),
+      h('span', { class: 'badge' }, days.length || '—')));
     if (days.length) {
-      for (const d of days) wrap.append(dayCard(d));
+      for (const d of days) wrap.append(dayRow(d));
     } else {
       wrap.append(h('p', { class: 'muted', style: { fontSize: '13px', margin: '0' } },
-        'Пока не внесено ни одного дня — заполните форму выше на завтра.'));
+        `Для ${draft.shift} заезда дней ещё не внесено.`));
     }
   }
 
@@ -182,6 +189,7 @@ export function actualScheduleCard(outerRedraw) {
       autoMapAll('actual');
       toast(`День ${dateRu(draft.date)} сохранён`);
       freshDraft();
+      render();       // панель больше не пересоздаётся целиком снаружи (она в модалке) — обновляемся сами
       outerRedraw();  // «Сопоставление групп» ниже должно увидеть новые коды
     };
 
@@ -213,24 +221,32 @@ export function actualScheduleCard(outerRedraw) {
     }
   }
 
-  /* ---------------- карточка уже внесённого дня ---------------- */
-  function dayCard(d) {
-    return h('div', { class: 'card', style: { marginBottom: '12px' } },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' } },
-        h('b', { class: 'mono' }, dateRu(d.date)),
-        h('span', { class: 'muted' }, d.weekday || weekdayOf(d.date)),
-        h('span', { class: 'pill cyan' }, `заезд ${d.shift}`),
-        h('span', { class: 'pill ok' }, `${d.lessons.length} ${plural(d.lessons.length, 'занятие', 'занятия', 'занятий')}`),
-        h('span', { style: { flex: '1 1 auto' } }),
-        h('button', {
-          class: 'btn sm ghost', onClick: () => {
-            draft = { date: d.date, shift: d.shift, lessons: d.lessons.map(l => ({ time: l.time, code: l.code, dir: l.direction || '' })), editKey: { shift: d.shift, date: d.date } };
-            render();
-            wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }, '✎ Изменить'),
-        h('button', {
-          class: 'btn sm danger ghost', onClick: () => confirmBox(`Удалить день ${dateRu(d.date)} (${d.lessons.length} ${plural(d.lessons.length, 'занятие', 'занятия', 'занятий')})?`, () => {
+  /* ---------------- строка уже внесённого дня — свёрнута, раскрывается по клику ---------------- */
+  function dayRow(d) {
+    const key = `${d.shift}|${d.date}`;
+    const isOpen = expanded.has(key);
+    const toggle = () => { isOpen ? expanded.delete(key) : expanded.add(key); render(); };
+    const head = h('div', {
+      style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '10px 14px', cursor: 'pointer' },
+      onClick: toggle,
+    },
+      h('span', { class: 'muted', style: { fontSize: '12px', width: '10px', display: 'inline-block' } }, isOpen ? '▾' : '▸'),
+      h('b', { class: 'mono' }, dateRu(d.date)),
+      h('span', { class: 'muted' }, d.weekday || weekdayOf(d.date)),
+      h('span', { class: 'pill ok' }, `${d.lessons.length} ${plural(d.lessons.length, 'занятие', 'занятия', 'занятий')}`),
+      h('span', { style: { flex: '1 1 auto' } }),
+      h('button', {
+        class: 'btn sm ghost', title: 'Изменить', onClick: (e) => {
+          e.stopPropagation();
+          draft = { date: d.date, shift: d.shift, lessons: d.lessons.map(l => ({ time: l.time, code: l.code, dir: l.direction || '' })), editKey: { shift: d.shift, date: d.date } };
+          render();
+          wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, '✎'),
+      h('button', {
+        class: 'btn sm danger ghost', title: 'Удалить', onClick: (e) => {
+          e.stopPropagation();
+          confirmBox(`Удалить день ${dateRu(d.date)} (${d.lessons.length} ${plural(d.lessons.length, 'занятие', 'занятия', 'занятий')})?`, () => {
             update(x => {
               const sc = x.actual.schedules[String(d.shift)];
               if (!sc) return;
@@ -238,17 +254,22 @@ export function actualScheduleCard(outerRedraw) {
               if (!sc.lessons.length) delete x.actual.schedules[String(d.shift)];
               else recalcMeta(sc);
             });
+            expanded.delete(key);
             if (draft.editKey && draft.editKey.date === d.date && draft.editKey.shift === d.shift) freshDraft();
             toast('День удалён');
+            render();
             outerRedraw();  // «Сопоставление групп» ниже должно потерять пропавшие коды
-          })
-        }, '🗑')),
+          });
+        }
+      }, '🗑'));
+    const body = isOpen ? h('div', { style: { padding: '0 14px 12px' } },
       h('div', { class: 'table-wrap' }, h('table', { class: 'compact' },
         h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, 'Время'), h('th', {}, 'Группа'), h('th', {}, 'Направление'))),
         h('tbody', {}, ...d.lessons.map(l => h('tr', {},
           h('td', { class: 'num muted mono' }, `${l.no}ур`),
           h('td', { class: 'mono' }, l.time),
           h('td', {}, h('b', {}, l.code)),
-          h('td', { class: 'muted', style: { fontSize: '12px' } }, l.direction || '—')))))));
+          h('td', { class: 'muted', style: { fontSize: '12px' } }, l.direction || '—'))))))) : null;
+    return h('div', { class: 'card', style: { marginBottom: '8px', padding: '0' } }, head, body);
   }
 }

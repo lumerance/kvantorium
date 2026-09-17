@@ -45,7 +45,7 @@ export function render(root, params = {}) {
         ? 'Реальный состав и расписание — если отличаются от официальных сетевых документов. Список и коды никак не связаны с официальным журналом, кроме переноса оценок по совпадающим ФИО.'
         : 'Официальные сетевые документы школ — на них строится ведомость, часы по плану и переносятся оценки из фактического журнала.'));
 
-    wrap.append(h('div', { style: { marginBottom: '16px' } }, studentsCard(st, redraw, kind)));
+    wrap.append(studentsRow(st, redraw, kind));
     wrap.append(scheduleCard(st, redraw, kind));
     wrap.append(h('div', { style: { marginBottom: '16px' } }, mappingCard(st, redraw, kind)));
     if (kind === 'official') {
@@ -57,8 +57,41 @@ export function render(root, params = {}) {
   redraw();
 }
 
-/* ---------------- список обучающихся ---------------- */
-function studentsCard(st, redraw, kind) {
+/* ---------------- список обучающихся: строка + модальное окно ---------------- */
+// Полное содержимое (список, кнопки, загрузка файла) открывается в модалке —
+// на странице остаётся только сводная строка с числом детей и кнопкой
+// «Открыть», а не панель на всю высоту.
+function studentsRow(st, redraw, kind) {
+  const s = dataOf(st, kind).students;
+  return h('div', { class: 'card', style: { marginBottom: '16px' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' } },
+      h('div', {},
+        h('h3', { style: { margin: '0 0 4px' } }, '1. Список обучающихся'),
+        h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
+          s ? `${s.stats.subjects} предм. · ${s.stats.groups} групп · ${s.stats.students} детей` + (s.sourceName ? ` — ${s.sourceName}` : '')
+            : 'Список ещё не загружен')),
+      h('button', { class: 'btn primary', onClick: () => openStudentsModal(kind, redraw) }, s ? '📋 Открыть' : '📋 Загрузить')));
+}
+
+function openStudentsModal(kind, outerRedraw) {
+  const wrap = h('div', {});
+  let closeModal = null;
+  const localRedraw = () => { outerRedraw(); render(); };
+  function render() {
+    wrap.innerHTML = '';
+    wrap.append(studentsCard(getState(), localRedraw, kind, { heading: null, onNavigate: () => closeModal?.() }));
+  }
+  render();
+  const { close } = modal({
+    wide: true,
+    title: kind === 'actual' ? 'Список обучающихся · Фактический журнал' : 'Список обучающихся · Официальный журнал',
+    body: wrap, okText: null, cancelText: 'Закрыть',
+  });
+  closeModal = close;
+}
+
+function studentsCard(st, redraw, kind, opts = {}) {
+  const { heading = '1. Список обучающихся', onNavigate } = opts;
   const s = dataOf(st, kind).students;
   const { subj, grp } = uiKeys(kind);
   const body = h('div', {});
@@ -94,7 +127,7 @@ function studentsCard(st, redraw, kind) {
         class: 'btn sm', title: 'Убрать группы, которых нет в загруженном расписании',
         onClick: () => keepOnlyScheduled(redraw, kind)
       }, '⚡ Только мои по расписанию') : null,
-      h('button', { class: 'btn sm', onClick: () => go('journal', kind === 'actual' ? { kind: 'actual' } : undefined) }, 'Открыть журнал →'),
+      h('button', { class: 'btn sm', onClick: () => { onNavigate?.(); go('journal', kind === 'actual' ? { kind: 'actual' } : undefined); } }, 'Открыть журнал →'),
     ));
   }
   if (!s) body.append(h('div', { style: { marginBottom: '10px' } },
@@ -118,7 +151,8 @@ function studentsCard(st, redraw, kind) {
       } catch (e) { console.error(e); toast('Ошибка импорта: ' + e.message, 'err'); }
     },
   }));
-  return h('div', { class: 'card' }, h('h3', {}, '1. Список обучающихся'), body);
+  if (!heading) return body;
+  return h('div', { class: 'card' }, h('h3', {}, heading), body);
 }
 
 function pickCsv(redraw, kind) {
@@ -332,10 +366,40 @@ function planCard(st, redraw) {
 }
 
 /* ---------------- расписание ---------------- */
+// Фактическое расписание вносится день за днём (см. actual-schedule-panel.js) —
+// школа присылает его на завтра, а не файлом на весь заезд, как официальное.
+// Панель со всеми днями может стать длинной, поэтому на странице — только
+// сводная строка, а сама панель (форма + свёрнутые дни выбранного заезда)
+// открывается в модальном окне.
+function actualScheduleRow(st, redraw, kind) {
+  const data = dataOf(st, kind);
+  let days = 0, lessons = 0;
+  for (const sh of SHIFTS) {
+    const sc = data.schedules[String(sh)];
+    if (!sc) continue;
+    lessons += sc.lessons.length;
+    days += new Set(sc.lessons.map(l => l.date)).size;
+  }
+  return h('div', { class: 'card', style: { marginBottom: '16px' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' } },
+      h('div', {},
+        h('h3', { style: { margin: '0 0 4px' } }, '2. Расписание по дням'),
+        h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
+          days ? `${days} дн. внесено · ${lessons} занятий всего` : 'Школа обычно присылает расписание на завтра — вносите день за днём')),
+      h('button', { class: 'btn primary', onClick: () => openActualScheduleModal(redraw) }, days ? '🗓 Открыть' : '🗓 Внести день')));
+}
+
+function openActualScheduleModal(outerRedraw) {
+  modal({
+    wide: true,
+    title: 'Расписание по дням · Фактический журнал',
+    body: actualScheduleCard(outerRedraw),
+    okText: null, cancelText: 'Закрыть',
+  });
+}
+
 function scheduleCard(st, redraw, kind) {
-  // Фактическое расписание вносится день за днём (см. actual-schedule-panel.js) —
-  // школа присылает его на завтра, а не файлом на весь заезд, как официальное.
-  if (kind === 'actual') return actualScheduleCard(redraw);
+  if (kind === 'actual') return actualScheduleRow(st, redraw, kind);
 
   const data = dataOf(st, kind);
   const cards = SHIFTS.map(shift => {
