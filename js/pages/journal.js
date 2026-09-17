@@ -15,19 +15,22 @@ import { ktpCard } from './ktp-panel.js';
 import { go } from '../core/router.js';
 
 export const SHIFTS = [1, 2, 3];
-// Группы «Набора» (дополнительное образование, которые педагог набирает сам)
-// показываются только в официальном журнале как ещё один псевдо-предмет —
-// занятия для них берутся напрямую по коду расписания, а не через mapping.
+// Группы «Набора» — в официальном журнале это группы дополнительного
+// образования (педагог набирает сам), в фактическом — обычные классы
+// (st.actual.enroll) — показываются как ещё один псевдо-предмет в своём
+// журнале; занятия для них берутся напрямую по коду расписания, а не через
+// mapping.
 export const ENROLL_SUBJECT_ID = '__enroll__';
 const shortName = (fio) => (fio || '').trim().split(/\s+/).slice(0, 2).join(' ');
 const matchKey = (fio) => shortName(fio).toLowerCase();
 
-function enrollAsSubject(st) {
-  const groups = (st.enroll?.groups || []).map(g => ({
+function enrollAsSubject(st, isActual) {
+  const src = isActual ? st.actual.enroll : st.enroll;
+  const groups = (src?.groups || []).map(g => ({
     id: g.id, name: g.name, code: g.code || null, program: g.program || '',
     students: g.students.map(s => ({ id: s.id, fio: s.fio, short: shortName(s.fio) })),
   }));
-  return { id: ENROLL_SUBJECT_ID, title: 'Набор (ДО)', isEnroll: true, groups };
+  return { id: ENROLL_SUBJECT_ID, title: isActual ? 'Классы' : 'Набор (ДО)', isEnroll: true, groups };
 }
 const MARKS = ['✓', 'н', '5', '4', '3', '2'];
 const CYCLE = ['', '✓', 'н', '5', '4', '3', '2'];
@@ -97,27 +100,27 @@ export function render(root, params = {}) {
     wrap.innerHTML = '';
 
     const realSubjects = data.students?.subjects || [];
-    const enrollGroups = isActual ? [] : (st.enroll?.groups || []);
+    const enrollGroups = (isActual ? st.actual.enroll : st.enroll)?.groups || [];
     if (!realSubjects.length && !enrollGroups.length) {
       wrap.append(h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, `Электронный журнал · ${kindTitle}`))));
       wrap.append(h('div', { class: 'card' }, emptyState('📋',
         isActual
-          ? 'Фактический список обучающихся ещё не загружен. Импортируйте свой docx со списком детей и docx с реальным расписанием — отдельно от официальных документов.'
+          ? 'Фактический список обучающихся ещё не загружен. Импортируйте свой docx со списком детей и docx с реальным расписанием — либо заведите класс на вкладке «Набор».'
           : 'Список обучающихся ещё не загружен. Импортируйте docx со списком детей и docx с расписанием — либо заведите группу дополнительного образования на вкладке «Набор».',
         h('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' } },
           h('button', { class: 'btn primary', onClick: () => go('data', isActual ? { kind: 'actual' } : undefined) }, 'Перейти к импорту'),
-          isActual ? null : h('button', { class: 'btn', onClick: () => go('enroll') }, 'Открыть «Набор»')))));
+          h('button', { class: 'btn', onClick: () => go('enroll', isActual ? { kind: 'actual' } : undefined) }, isActual ? 'Открыть «Классы»' : 'Открыть «Набор»')))));
       return;
     }
 
     const ui = st.ui;
     const shift = ui[uiShiftKey] || 1;
-    const subjects = enrollGroups.length ? [...realSubjects, enrollAsSubject(st)] : realSubjects;
+    const subjects = enrollGroups.length ? [...realSubjects, enrollAsSubject(st, isActual)] : realSubjects;
     let subject = subjects.find(s => s.id === ui[uiSubjectKey]) || subjects[0];
     let group = subject.groups.find(g => g.id === ui[uiGroupKey]) || subject.groups[0];
 
     const sched = data.schedules[String(shift)];
-    const lessons = subject.isEnroll ? lessonsForCode(shift, group.code, st) : lessonsForGroup(shift, group.id, st, kind);
+    const lessons = subject.isEnroll ? lessonsForCode(shift, group.code, st, kind) : lessonsForGroup(shift, group.id, st, kind);
     const canTransfer = !isActual && !subject.isEnroll && (st.actual?.students?.subjects || []).length > 0;
 
     wrap.append(h('div', { class: 'page-head' },
@@ -132,8 +135,8 @@ export function render(root, params = {}) {
         (subject.isEnroll || isActual) ? null : h('button', { class: 'btn primary', onClick: () => openVedomost(subject) }, '📄 Создание ведомости'),
         h('button', {
           class: 'btn',
-          onClick: () => go(subject.isEnroll ? 'enroll' : 'data', (!subject.isEnroll && isActual) ? { kind: 'actual' } : undefined),
-        }, subject.isEnroll ? '⚙ Набор' : '⚙ Данные'),
+          onClick: () => go(subject.isEnroll ? 'enroll' : 'data', isActual ? { kind: 'actual' } : undefined),
+        }, subject.isEnroll ? (isActual ? '⚙ Классы' : '⚙ Набор') : '⚙ Данные'),
       )));
 
     /* --- вкладки заездов --- */
@@ -195,7 +198,7 @@ export function render(root, params = {}) {
           ? `В расписании ${shift} заезда нет занятий с кодом «${group.code}».`
           : `Группа «${group.name}» не привязана к коду в расписании.`;
         wrap.append(h('div', { class: 'card' }, emptyState('🔗', msg,
-          h('button', { class: 'btn primary', onClick: () => go('enroll') }, 'Привязать код в «Наборе»'))));
+          h('button', { class: 'btn primary', onClick: () => go('enroll', isActual ? { kind: 'actual' } : undefined) }, 'Привязать код в «Наборе»'))));
         return;
       }
       const mapped = Object.entries(data.mapping).filter(([, m]) => m?.groupId === group.id).length;
