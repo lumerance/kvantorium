@@ -106,12 +106,27 @@ function mergeField(items, pick) {
   return out.join('; ');
 }
 
+/** Уникальные значения за день — без привязки к соседству, только порядок
+ *  первого появления. Нужна для «Тип занятия»: там мало вариантов
+ *  (изучение нового, применение, повторение…), и совпадение — не только
+ *  подряд идущее (одна тема КТП на несколько часов), но и через занятие,
+ *  например 1-й и 3-й урок за день. Тема и содержание так не склеиваются —
+ *  повтор не подряд там обычно значит разные по факту фрагменты урока. */
+function mergeUnique(items, pick) {
+  const out = [];
+  for (const it of items) {
+    const v = norm(it.slot ? pick(it.slot.row) : '');
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out.join('; ');
+}
+
 function dayBlock(day) {
   const nos = day.items.map(it => it.lesson.no);
   const hours = day.items.map(it => it.slot?.hourNo).filter(Boolean);
   const theme = mergeField(day.items, r => r.theme);
   const content = mergeField(day.items, r => r.content);
-  const type = mergeField(day.items, r => r.type);
+  const type = mergeUnique(day.items, r => r.type);
 
   const field = (label, value) => h('div', { class: 'ktp-field' },
     h('span', { class: 'k' }, label),
