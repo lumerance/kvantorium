@@ -217,23 +217,39 @@ export function render(root, params = {}) {
     if (!isActual) wrap.append(ktpCard(st, group, shift, lessons, redraw));
 
     /** Случайные оценки на одно занятие: fives пятёрок и fours четвёрок —
-     *  случайным ученикам группы, остальным — случайно 3 или 2. */
+     *  случайным ученикам, присутствовавшим в этот день, остальным из них —
+     *  случайно 3 или 2. У кого на первом уроке дня стоит «н» — оценка не
+     *  ставится, вместо неё на это занятие тоже повторяется «н» (в один
+     *  день обычно 2-3 урока подряд одним блоком, оценки ставятся не на
+     *  первый из них — но раз не пришёл к началу, значит не был и дальше). */
     function fillLessonRandom(l) {
       if (!randomCfg) return;
-      const ids = group.students.map(s => s.id);
-      for (let i = ids.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [ids[i], ids[j]] = [ids[j], ids[i]];
+      const jGroup = data.journal?.[shift]?.[group.id] || {};
+      const dayLessons = lessons.filter(x => x.date === l.date).sort((a, b) => a.no - b.no);
+      const firstKey = lessonKey(dayLessons[0]);
+
+      const present = [];
+      const absentIds = [];
+      for (const s of group.students) {
+        if ((jGroup[s.id]?.[firstKey] || '') === 'н') absentIds.push(s.id);
+        else present.push(s.id);
       }
-      const n = ids.length;
+      for (let i = present.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [present[i], present[j]] = [present[j], present[i]];
+      }
+      const n = present.length;
       const f5 = Math.min(randomCfg.fives, n);
       const f4 = Math.min(randomCfg.fours, n - f5);
       const k = lessonKey(l);
       let idx = 0;
-      for (; idx < f5; idx++) setMark(shift, group.id, ids[idx], k, '5');
-      for (; idx < f5 + f4; idx++) setMark(shift, group.id, ids[idx], k, '4');
-      for (; idx < n; idx++) setMark(shift, group.id, ids[idx], k, Math.random() < 0.65 ? '3' : '2');
-      toast(`Случайные оценки выставлены на ${dateRu(l.date)}: ${f5}×5, ${f4}×4`);
+      for (; idx < f5; idx++) setMark(shift, group.id, present[idx], k, '5');
+      for (; idx < f5 + f4; idx++) setMark(shift, group.id, present[idx], k, '4');
+      for (; idx < n; idx++) setMark(shift, group.id, present[idx], k, Math.random() < 0.65 ? '3' : '2');
+      for (const id of absentIds) setMark(shift, group.id, id, k, 'н');
+
+      toast(`Случайные оценки на ${dateRu(l.date)}: ${f5}×5, ${f4}×4` +
+        (absentIds.length ? `, «н» у отсутствовавших: ${absentIds.length}` : ''));
       redraw();
     }
 
@@ -277,14 +293,28 @@ export function render(root, params = {}) {
     const defFours = Math.max(0, Math.min(n - defFives, randomCfg?.fours ?? Math.round(n * 0.35)));
     const fivesInput = h('input', { type: 'number', inputmode: 'numeric', min: '0', max: String(n), value: String(defFives) });
     const foursInput = h('input', { type: 'number', inputmode: 'numeric', min: '0', max: String(n), value: String(defFours) });
+    const countHint = h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '12px 0 0' } });
+    const updateHint = () => {
+      const fives = Math.max(0, parseInt(fivesInput.value, 10) || 0);
+      const fours = Math.max(0, parseInt(foursInput.value, 10) || 0);
+      const over = fives + fours > n;
+      countHint.textContent = over
+        ? `⚠ В группе «${group.name}» всего ${n} чел. — указано ${fives + fours}, это больше.`
+        : `В группе «${group.name}» — ${n} чел.: ${fives}×5, ${fours}×4, оставшимся ${n - fives - fours} — случайно 3 или 2.`;
+      countHint.style.color = over ? 'var(--red)' : '';
+    };
+    fivesInput.addEventListener('input', updateHint);
+    foursInput.addEventListener('input', updateHint);
+    updateHint();
     modal({
       title: '🎲 Случайные оценки',
       body: h('div', {},
         h('p', { class: 'muted', style: { marginTop: 0 } },
-          `В группе «${group.name}» — ${n} чел. Укажите, сколько пятёрок и четвёрок раздать — кому именно из группы, решит случайный выбор. Остальным ученикам достанутся случайные 3 и 2. После подтверждения кликните по шапке занятия (дате) в таблице — оценки появятся сразу на весь столбец; так можно раздать оценки на несколько занятий подряд, не открывая модалку заново.`),
+          'Укажите, сколько пятёрок и четвёрок раздать — кому именно из группы, решит случайный выбор. После подтверждения кликните по шапке занятия (дате) в таблице — оценки появятся сразу на весь столбец; так можно раздать оценки на несколько занятий подряд, не открывая модалку заново. Кто на первом уроке дня отмечен «н» — оценку не получит, а «н» повторится и на этом занятии.'),
         h('div', { class: 'row' },
           h('label', { class: 'field' }, h('span', {}, 'Пятёрок'), fivesInput),
-          h('label', { class: 'field' }, h('span', {}, 'Четвёрок'), foursInput))),
+          h('label', { class: 'field' }, h('span', {}, 'Четвёрок'), foursInput)),
+        countHint),
       okText: 'Готово',
       onOk: () => {
         const fives = Math.max(0, parseInt(fivesInput.value, 10) || 0);
