@@ -83,6 +83,22 @@ export function render(root, params = {}) {
   root.append(wrap);
   let brush = '✓';
   let randomCfg = null;   // { fives, fours } — заданное в модалке «Случайные оценки»
+  let lastAction = null;  // { shift, groupId, label, undo() } — для кнопки «↩ Отменить»
+
+  /** Снимок всех отметок группы за заезд — для отмены массовых действий
+   *  («Все присутствуют», «Случайные оценки»), которые иначе не откатить
+   *  иначе как вручную переклацать каждую клетку обратно. */
+  function snapshotGroupJournal(shift, groupId) {
+    const j = journalRoot(getState()).journal;
+    return JSON.parse(JSON.stringify(j?.[shift]?.[groupId] || {}));
+  }
+  function restoreGroupJournal(shift, groupId, snapshot) {
+    update(x => {
+      const j = journalRoot(x).journal;
+      j[shift] = j[shift] || {};
+      j[shift][groupId] = snapshot;
+    });
+  }
 
   function setMark(shift, groupId, studentId, key, mark) {
     update(x => {
@@ -130,6 +146,9 @@ export function render(root, params = {}) {
         h('p', {}, `${subject.title} · ${group.name} · ${group.students.length} чел.` +
           (sched ? ` · расписание ${shift} заезда: ${sched.lessons.length} занятий` : ' · расписание заезда не загружено'))),
       h('div', { class: 'head-actions' },
+        (lastAction && lastAction.shift === shift && lastAction.groupId === group.id)
+          ? h('button', { class: 'btn danger ghost', title: `Отменить: ${lastAction.label}`, onClick: () => lastAction.undo() }, `↩ Отменить (${lastAction.label})`)
+          : null,
         h('button', { class: 'btn', onClick: () => markAllPresent(shift, group, lessons) }, '✓ Все присутствуют'),
         h('button', { class: 'btn', onClick: () => exportJournal(data, subject, group, shift, lessons) }, '⤓ Экспорт CSV'),
         canTransfer ? h('button', { class: 'btn', onClick: () => openTransferDialog(redraw) }, '🔁 Перенести из Фактического') : null,
@@ -224,6 +243,7 @@ export function render(root, params = {}) {
      *  первый из них — но раз не пришёл к началу, значит не был и дальше). */
     function fillLessonRandom(l) {
       if (!randomCfg) return;
+      const before = snapshotGroupJournal(shift, group.id);
       const jGroup = data.journal?.[shift]?.[group.id] || {};
       const dayLessons = lessons.filter(x => x.date === l.date).sort((a, b) => a.no - b.no);
       const firstKey = lessonKey(dayLessons[0]);
@@ -248,6 +268,10 @@ export function render(root, params = {}) {
       for (; idx < n; idx++) setMark(shift, group.id, present[idx], k, Math.random() < 0.65 ? '3' : '2');
       for (const id of absentIds) setMark(shift, group.id, id, k, 'н');
 
+      lastAction = {
+        shift, groupId: group.id, label: `случайные оценки · ${dateRu(l.date)}`,
+        undo: () => { restoreGroupJournal(shift, group.id, before); lastAction = null; toast('Действие отменено'); redraw(); },
+      };
       toast(`Случайные оценки на ${dateRu(l.date)}: ${f5}×5, ${f4}×4` +
         (absentIds.length ? `, «н» у отсутствовавших: ${absentIds.length}` : ''));
       redraw();
@@ -269,6 +293,7 @@ export function render(root, params = {}) {
 
   function markAllPresent(shift, group, lessons) {
     if (!lessons.length) return toast('Нет занятий для отметки', 'err');
+    const before = snapshotGroupJournal(shift, group.id);
     update(x => {
       const j = journalRoot(x).journal;
       j[shift] = j[shift] || {}; j[shift][group.id] = j[shift][group.id] || {};
@@ -277,6 +302,10 @@ export function render(root, params = {}) {
         for (const l of lessons) { const k = lessonKey(l); if (!cell[k]) cell[k] = '✓'; }
       }
     });
+    lastAction = {
+      shift, groupId: group.id, label: 'все присутствуют',
+      undo: () => { restoreGroupJournal(shift, group.id, before); lastAction = null; toast('Действие отменено'); redraw(); },
+    };
     toast(`Отмечено присутствие: ${group.students.length} чел. × ${lessons.length} занятий`);
     redraw();
   }
