@@ -478,7 +478,7 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
   color:var(--muted);transition:all .2s;user-select:none;
 }
 .check-pill:hover{color:var(--neon);border-color:rgba(43,255,139,.5);box-shadow:0 0 14px rgba(43,255,139,.2)}
-.check-pill:has(input:checked){color:var(--neon);border-color:rgba(43,255,139,.45);background:rgba(43,255,139,.08)}
+.check-pill:has(input:checked),.check-pill.on{color:var(--neon);border-color:rgba(43,255,139,.45);background:rgba(43,255,139,.08)}
 .check-pill input{accent-color:var(--neon);cursor:pointer}
 .pill.removable{padding-right:4px;gap:4px}
 .pill-x{

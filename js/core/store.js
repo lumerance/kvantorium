@@ -3,12 +3,63 @@ import { autoMatch } from '../parsers/schedule.js';
 
 const KEY = 'kvantorium28.state.v1';
 
-export const DEFAULTS = {
-  version: 1,
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// Один рабочий период («агломерация» — блок из трёх заездов). Всё, что
+// относится к конкретному набору детей — списки, расписания, журнал,
+// сопоставление, «Набор», КТП-программы, ведомость — живёт внутри
+// агломерации целиком, для официального и фактического журнала сразу.
+// Когда одна агломерация сменяется другой (новый набор детей на весь
+// следующий блок заездов), заводится новая — прежняя не стирается и не
+// перезаписывается, а остаётся в списке для просмотра (см. viewedAgg/
+// activeAgg ниже и переключатель на странице «Данные»).
+const AGG_DEFAULTS = {
   students: null,               // {subjects, stats, sourceName, importedAt}
   schedules: {},                // {"1": {...}, "2": {...}, "3": {...}}
   mapping: {},                  // код расписания -> {subjectId, groupId}
   journal: {},                  // shift -> groupId -> studentId -> lessonKey -> mark
+  // Группы дополнительного образования: набор ведёт сам педагог (У1, Д2 …),
+  // состав правится вручную, у каждого ребёнка два факта — договор и Навигатор.
+  enroll: { groups: [] },       // [{id, name, program, note, createdAt, students:[...]}]
+  // «Фактический» журнал — параллельный набор списка/расписания/журнала того
+  // же вида, что и основной (официальный): свой импорт, свои группы, свои
+  // отметки. Нужен, когда реальный состав занятий отличается от официальных
+  // сетевых документов — фамилии в обоих журналах могут совпадать, тогда
+  // оценки переносятся кнопкой на официальном журнале (см. js/pages/journal.js).
+  actual: {
+    students: null,
+    schedules: {},
+    mapping: {},
+    journal: {},
+    // Свои классы для фактического журнала — те же «группы набора», что и в
+    // официальном (js/pages/enroll.js), только без учёта договора/Навигатора:
+    // это реальные классы, а не набираемые самим педагогом группы ДО.
+    enroll: { groups: [] },
+  },
+  // Учебные программы с КТП: темы/содержание/тип занятия по часам. Программа
+  // привязывается к группе, дальше часы раскладываются по заездам и занятиям
+  // официального расписания (см. js/parsers/ktp.js и js/pages/ktp-panel.js).
+  programs: [],                 // [{id, name, sourceName, shiftHours:[12,12,12], rows:[{no,theme,content,type,hours}]}]
+  groupPrograms: {},            // groupId -> programId
+  ktpOffsets: {},               // "groupId|shift" -> сдвиг по КТП, если занятие переносили
+  vedomostHeader: {},           // шапка итоговой ведомости
+  vedomostGroups: [],           // группы, попадающие в ведомость
+  vedomostMarks: {},            // ручные правки оценок: studentId -> {1,2,3,final}
+};
+
+function newAgglomeration(name) {
+  return {
+    id: 'agg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: (name || '').trim() || 'Агломерация',
+    createdAt: new Date().toISOString(),
+    ...clone(AGG_DEFAULTS),
+  };
+}
+
+export const DEFAULTS = {
+  version: 2,
+  agglomerations: [],           // [{id, name, createdAt, ...AGG_DEFAULTS}] — наполняется при первом запуске
+  activeAgglomerationId: null,
   plan: null,                   // разобранный индивидуальный план
   hoursLog: [],                 // списанные часы
   hoursSettings: { annualNorm: 2000, source: 'manual' },
@@ -51,40 +102,12 @@ export const DEFAULTS = {
     vacationDays: 14,
     history: [],                 // сохранённые расчёты отпускных
   },
-  // Группы дополнительного образования: набор ведёт сам педагог (У1, Д2 …),
-  // состав правится вручную, у каждого ребёнка два факта — договор и Навигатор.
-  enroll: { groups: [] },       // [{id, name, program, note, createdAt, students:[...]}]
-  // «Фактический» журнал — параллельный набор списка/расписания/журнала того
-  // же вида, что и основной (официальный): свой импорт, свои группы, свои
-  // отметки. Нужен, когда реальный состав занятий отличается от официальных
-  // сетевых документов — фамилии в обоих журналах могут совпадать, тогда
-  // оценки переносятся кнопкой на официальном журнале (см. js/pages/journal.js).
-  actual: {
-    students: null,
-    schedules: {},
-    mapping: {},
-    journal: {},
-    // Свои классы для фактического журнала — те же «группы набора», что и в
-    // официальном (js/pages/enroll.js), только без учёта договора/Навигатора:
-    // это реальные классы, а не набираемые самим педагогом группы ДО.
-    enroll: { groups: [] },
-  },
-  // Учебные программы с КТП: темы/содержание/тип занятия по часам. Программа
-  // привязывается к группе, дальше часы раскладываются по заездам и занятиям
-  // официального расписания (см. js/parsers/ktp.js и js/pages/ktp-panel.js).
-  programs: [],                 // [{id, name, sourceName, shiftHours:[12,12,12], rows:[{no,theme,content,type,hours}]}]
-  groupPrograms: {},            // groupId -> programId
-  ktpOffsets: {},               // "groupId|shift" -> сдвиг по КТП, если занятие переносили
-  vedomostHeader: {},           // шапка итоговой ведомости
-  vedomostGroups: [],           // группы, попадающие в ведомость
-  vedomostMarks: {},            // ручные правки оценок: studentId -> {1,2,3,final}
   ui: {
     journalShift: 1, journalSubject: null, journalGroup: null, salaryTab: 'calc',
     actualJournalShift: 1, actualJournalSubject: null, actualJournalGroup: null,
+    viewingAgglomerationId: null,   // null = смотрим активную; иначе — архивную (только чтение)
   },
 };
-
-function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
 function deepDefaults(target, defs) {
   for (const k of Object.keys(defs)) {
@@ -96,11 +119,58 @@ function deepDefaults(target, defs) {
   return target;
 }
 
+/** Старый формат (до появления агломераций) хранил students/schedules/…
+ *  прямо на верхнем уровне state. Оборачивает их в первую агломерацию —
+ *  так апдейт не стирает то, что уже накопил педагог. Не трогает state,
+ *  где агломерации уже есть (повторный запуск — no-op). */
+let didMigrateLegacy = false;
+
+function migrateLegacy(raw) {
+  if (Array.isArray(raw.agglomerations) && raw.agglomerations.length) return raw;
+  const legacyKeys = Object.keys(AGG_DEFAULTS);
+  const hasLegacy = legacyKeys.some(k => raw[k] !== undefined);
+  const agg = newAgglomeration('Агломерация 1');
+  for (const k of legacyKeys) {
+    if (raw[k] !== undefined) agg[k] = raw[k];
+    delete raw[k];
+  }
+  if (hasLegacy || !raw.agglomerations) {
+    raw.agglomerations = [agg];
+    raw.activeAgglomerationId = agg.id;
+    didMigrateLegacy = true;
+  }
+  return raw;
+}
+
+/** Приводит сырой объект (из localStorage или из импортированного бэкапа)
+ *  к текущей форме: миграция старого плоского формата, доподстановка
+ *  дефолтов на верхнем уровне и отдельно внутри каждой агломерации
+ *  (массивы deepDefaults не обходит — см. её реализацию), гарантия что
+ *  агломерация есть хотя бы одна и activeAgglomerationId на неё указывает. */
+function finalizeState(raw) {
+  const s = deepDefaults(migrateLegacy(raw), DEFAULTS);
+  if (!s.agglomerations.length) s.agglomerations.push(newAgglomeration('Агломерация 1'));
+  for (const agg of s.agglomerations) deepDefaults(agg, AGG_DEFAULTS);
+  if (!s.agglomerations.some(a => a.id === s.activeAgglomerationId)) {
+    s.activeAgglomerationId = s.agglomerations[0].id;
+  }
+  return s;
+}
+
 let state;
 try {
   const raw = localStorage.getItem(KEY);
-  state = raw ? deepDefaults(JSON.parse(raw), DEFAULTS) : clone(DEFAULTS);
-} catch { state = clone(DEFAULTS); }
+  state = finalizeState(raw ? JSON.parse(raw) : clone(DEFAULTS));
+} catch { state = finalizeState(clone(DEFAULTS)); }
+// Перевод в формат с агломерациями должен сохраниться сразу, а не только
+// при следующей правке — иначе педагог мог бы открыть журнал, ничего не
+// поменять, закрыть вкладку, а localStorage остался бы в старом плоском
+// виде (следующий запуск просто смигрировал бы заново — не потеря данных,
+// но лучше зафиксировать сразу и синхронно, не дожидаясь debounce у save()).
+if (didMigrateLegacy) {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch (e) { console.error('Не удалось сохранить состояние после перехода на агломерации', e); }
+}
 
 const listeners = new Set();
 let saveTimer = null;
@@ -124,7 +194,7 @@ export function update(fn) {
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
 export function resetAll() {
-  state = clone(DEFAULTS);
+  state = finalizeState(clone(DEFAULTS));
   localStorage.removeItem(KEY);
   listeners.forEach(l => l(state));
 }
@@ -137,19 +207,100 @@ export function importBackup(json) {
   const data = JSON.parse(json);
   const s = data.state || data;
   if (!s || typeof s !== 'object') throw new Error('Некорректный файл резервной копии.');
-  state = deepDefaults(s, DEFAULTS);
+  state = finalizeState(s);
   save();
   listeners.forEach(l => l(state));
 }
 
+/* ---------- агломерации ---------- */
+
+/** Активная агломерация — та, куда идёт вся новая работа и куда пишут
+ *  все мутирующие функции ниже, независимо от того, что сейчас открыто
+ *  на экране (см. viewedAgg). */
+export function activeAgg(st = state) {
+  return st.agglomerations.find(a => a.id === st.activeAgglomerationId) || st.agglomerations[0];
+}
+
+/** Просматриваемая агломерация — обычно совпадает с активной; на странице
+ *  «Данные» можно временно переключиться на просмотр архивной
+ *  (st.ui.viewingAgglomerationId) — страницы должны открывать её только
+ *  для чтения (см. isViewingArchive). */
+export function viewedAgg(st = state) {
+  const id = st.ui?.viewingAgglomerationId;
+  if (!id) return activeAgg(st);
+  return st.agglomerations.find(a => a.id === id) || activeAgg(st);
+}
+
+export function isViewingArchive(st = state) {
+  return viewedAgg(st).id !== activeAgg(st).id;
+}
+
+export function allAgglomerations(st = state) {
+  return st.agglomerations.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Заводит новую агломерацию и сразу делает её активной — прежняя остаётся
+ *  в списке, доступная через переключатель просмотра. */
+export function createAgglomeration(name) {
+  const agg = newAgglomeration(name);
+  update(x => {
+    x.agglomerations.push(agg);
+    x.activeAgglomerationId = agg.id;
+    x.ui.viewingAgglomerationId = null;
+  });
+  return agg.id;
+}
+
+export function renameAgglomeration(id, name) {
+  const clean = (name || '').trim();
+  if (!clean) return;
+  update(x => {
+    const a = x.agglomerations.find(a => a.id === id);
+    if (a) a.name = clean;
+  });
+}
+
+/** Переключает, какая агломерация сейчас ПРОСМАТРИВАЕТСЯ. На то, куда
+ *  пишутся новые данные, не влияет — писать можно только в активную. */
+export function switchViewedAgglomeration(id) {
+  update(x => {
+    x.ui.viewingAgglomerationId = (id === x.activeAgglomerationId) ? null : id;
+  });
+}
+
+/** Делает уже существующую агломерацию активной (например, вернулись
+ *  доработать прошлую), в отличие от createAgglomeration, которая всегда
+ *  заводит новую с нуля. */
+export function setActiveAgglomeration(id) {
+  update(x => {
+    if (!x.agglomerations.some(a => a.id === id)) return;
+    x.activeAgglomerationId = id;
+    x.ui.viewingAgglomerationId = null;
+  });
+}
+
+/** Удаляет агломерацию из списка — нельзя удалить последнюю оставшуюся.
+ *  Если удаляемая была активной/просматриваемой, откатывается на первую. */
+export function deleteAgglomeration(id) {
+  update(x => {
+    if (x.agglomerations.length <= 1) return;
+    x.agglomerations = x.agglomerations.filter(a => a.id !== id);
+    if (x.activeAgglomerationId === id) x.activeAgglomerationId = x.agglomerations[0].id;
+    if (x.ui.viewingAgglomerationId === id) x.ui.viewingAgglomerationId = null;
+  });
+}
+
 /* ---------- удобные выборки ---------- */
 // Почти все функции ниже принимают необязательный kind: 'actual' — работать с
-// «Фактическим» журналом (st.actual.*) вместо основного «Официального»
-// (st.* напрямую). Опущенный kind = официальный, так что все существующие
-// вызовы без него ведут себя ровно как раньше.
+// «Фактическим» журналом (agg.actual.*) вместо основного «Официального»
+// (agg.* напрямую). Опущенный kind = официальный. st/agg здесь — объект
+// агломерации (см. activeAgg/viewedAgg), а не весь стейт приложения целиком:
+// у агломерации ровно та форма (students/schedules/mapping/journal/actual/…),
+// что и была у верхнего уровня state до появления агломераций, поэтому вся
+// логика ниже не менялась — только то, что ей передают на входе.
 const ns = (st, kind) => (kind === 'actual' ? st.actual : st);
 
-export function allGroups(st = state, kind = null) {
+export function allGroups(st = activeAgg(), kind = null) {
   const root = ns(st, kind);
   const out = [];
   for (const s of root.students?.subjects || []) {
@@ -158,7 +309,7 @@ export function allGroups(st = state, kind = null) {
   return out;
 }
 
-export function findGroup(groupId, st = state, kind = null) {
+export function findGroup(groupId, st = activeAgg(), kind = null) {
   return allGroups(st, kind).find(x => x.group.id === groupId) || null;
 }
 
@@ -168,7 +319,7 @@ export function findGroup(groupId, st = state, kind = null) {
  * st.mapping (он только для сетевых предметов из списка обучающихся), код
  * привязывается прямо к записи группы в st.enroll.groups.
  */
-export function lessonsForCode(shift, code, st = state, kind = null) {
+export function lessonsForCode(shift, code, st = activeAgg(), kind = null) {
   const root = ns(st, kind);
   const sch = root.schedules[String(shift)];
   if (!sch || !code) return [];
@@ -177,7 +328,7 @@ export function lessonsForCode(shift, code, st = state, kind = null) {
 }
 
 /** Занятия конкретной группы в заезде — по сопоставленным кодам расписания. */
-export function lessonsForGroup(shift, groupId, st = state, kind = null) {
+export function lessonsForGroup(shift, groupId, st = activeAgg(), kind = null) {
   const root = ns(st, kind);
   const sch = root.schedules[String(shift)];
   if (!sch) return [];
@@ -193,7 +344,7 @@ export const lessonKey = (l) => `${l.date}#${l.no}`;
 /* ---------- удаление лишних групп и занятий ---------- */
 
 /** Пересчитывает сводку по спискам обучающихся. */
-export function recalcStudentStats(st = state, kind = null) {
+export function recalcStudentStats(st = activeAgg(), kind = null) {
   const root = ns(st, kind);
   const subs = root.students?.subjects || [];
   if (!root.students) return;
@@ -205,57 +356,60 @@ export function recalcStudentStats(st = state, kind = null) {
 }
 
 /** Убирает следы группы из журнала, сопоставления и (для официального) ведомости. */
-function purgeGroup(st, groupId, kind) {
-  const root = ns(st, kind);
+function purgeGroup(agg, groupId, kind) {
+  const root = ns(agg, kind);
   for (const sh of Object.keys(root.journal || {})) delete root.journal[sh]?.[groupId];
   for (const [code, m] of Object.entries(root.mapping || {})) if (m?.groupId === groupId) delete root.mapping[code];
-  if (kind !== 'actual') st.vedomostGroups = (st.vedomostGroups || []).filter(id => id !== groupId);
+  if (kind !== 'actual') agg.vedomostGroups = (agg.vedomostGroups || []).filter(id => id !== groupId);
 }
 
-/** Оставляет только перечисленные группы (по id); предметы без групп удаляются. */
+/** Оставляет только перечисленные группы (по id); предметы без групп удаляются.
+ *  Всегда действует на активную агломерацию (см. activeAgg). */
 export function keepGroups(keepIds, kind = null) {
   const keep = new Set(keepIds);
-  update(st => {
-    const root = ns(st, kind);
+  update(x => {
+    const agg = activeAgg(x);
+    const root = ns(agg, kind);
     for (const sub of root.students?.subjects || []) {
-      for (const g of sub.groups) if (!keep.has(g.id)) purgeGroup(st, g.id, kind);
+      for (const g of sub.groups) if (!keep.has(g.id)) purgeGroup(agg, g.id, kind);
       sub.groups = sub.groups.filter(g => keep.has(g.id));
     }
     if (root.students) root.students.subjects = root.students.subjects.filter(s => s.groups.length);
-    recalcStudentStats(st, kind);
+    recalcStudentStats(agg, kind);
     const subjKey = kind === 'actual' ? 'actualJournalSubject' : 'journalSubject';
     const grpKey = kind === 'actual' ? 'actualJournalGroup' : 'journalGroup';
-    if (!allGroups(st, kind).some(x => x.group.id === st.ui[grpKey])) {
-      const first = allGroups(st, kind)[0];
-      st.ui[subjKey] = first?.subject.id || null;
-      st.ui[grpKey] = first?.group.id || null;
+    if (!allGroups(agg, kind).some(g2 => g2.group.id === x.ui[grpKey])) {
+      const first = allGroups(agg, kind)[0];
+      x.ui[subjKey] = first?.subject.id || null;
+      x.ui[grpKey] = first?.group.id || null;
     }
   });
 }
 
 export function removeGroup(groupId, kind = null) {
-  const keep = allGroups(state, kind).filter(x => x.group.id !== groupId).map(x => x.group.id);
+  const keep = allGroups(activeAgg(state), kind).filter(x => x.group.id !== groupId).map(x => x.group.id);
   keepGroups(keep, kind);
 }
 
 export function removeSubject(subjectId, kind = null) {
-  const keep = allGroups(state, kind).filter(x => x.subject.id !== subjectId).map(x => x.group.id);
+  const keep = allGroups(activeAgg(state), kind).filter(x => x.subject.id !== subjectId).map(x => x.group.id);
   keepGroups(keep, kind);
 }
 
 /** Сопоставляет ещё не сопоставленные коды расписания с группами из списка
  *  обучающихся автоматически (по grade/префиксу — см. parsers/schedule.js).
- *  kind как везде: 'actual' — фактический журнал, иначе официальный. */
+ *  kind как везде: 'actual' — фактический журнал, иначе официальный.
+ *  Всегда действует на активную агломерацию. */
 export function autoMapAll(kind = null) {
-  const st = state;
-  const data = ns(st, kind);
+  const agg = activeAgg(state);
+  const data = ns(agg, kind);
   const subjects = data.students?.subjects || [];
   if (!subjects.length) return 0;
   const codes = new Set();
   for (const sh of [1, 2, 3]) for (const c of (data.schedules[String(sh)]?.codes || [])) codes.add(c);
   let n = 0;
   update(x => {
-    const root = ns(x, kind);
+    const root = ns(activeAgg(x), kind);
     for (const c of codes) {
       if (root.mapping[c]) continue;
       const m = autoMatch(c, subjects);
@@ -265,10 +419,11 @@ export function autoMapAll(kind = null) {
   return n;
 }
 
-/** Оставляет в расписании заезда только занятия выбранных педагогов и кодов. */
+/** Оставляет в расписании заезда только занятия выбранных педагогов и кодов.
+ *  Всегда действует на активную агломерацию. */
 export function filterSchedule(shift, { teachers, codes } = {}, kind = null) {
-  update(st => {
-    const root = ns(st, kind);
+  update(x => {
+    const root = ns(activeAgg(x), kind);
     const sc = root.schedules[String(shift)];
     if (!sc) return;
     const tSet = teachers ? new Set(teachers) : null;

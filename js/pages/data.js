@@ -3,8 +3,11 @@
 // независимых набора списка/расписания/сопоставления одной и той же формы;
 // переключаются вкладкой вверху страницы, вся логика ниже общая — просто
 // читает/пишет либо st.* (официальный), либо st.actual.* (фактический).
-import { h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile } from '../core/ui.js';
-import { getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule, autoMapAll } from '../core/store.js';
+import { h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile, aggBadge } from '../core/ui.js';
+import {
+  getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule, autoMapAll,
+  viewedAgg, activeAgg, isViewingArchive, allAgglomerations, createAgglomeration, renameAgglomeration, switchViewedAgglomeration, setActiveAgglomeration,
+} from '../core/store.js';
 import { importStudentsFile, importStudentsCsvFile, studentsToCsv } from '../parsers/students.js';
 import { importScheduleFile, parseCode } from '../parsers/schedule.js';
 import { importPlanFile } from '../parsers/plan.js';
@@ -25,17 +28,25 @@ export function render(root, params = {}) {
 
   function redraw() {
     const st = getState();
+    const agg = viewedAgg(st);
+    const readOnly = isViewingArchive(st);
     wrap.innerHTML = '';
     wrap.append(h('div', { class: 'page-head' },
-      h('div', {}, h('h1', {}, 'Данные'), h('p', {}, 'Импорт документов, сопоставление групп и резервные копии. Всё хранится локально в браузере.')),
+      h('div', {}, h('h1', {}, 'Данные', aggBadge(agg, readOnly)), h('p', {}, 'Импорт документов, сопоставление групп и резервные копии. Всё хранится локально в браузере.')),
       h('div', { class: 'head-actions' },
         h('button', { class: 'btn', onClick: () => download(`Кванториум28_бэкап_${new Date().toISOString().slice(0, 10)}.json`, exportBackup(), 'application/json') }, '⤓ Выгрузить всё'),
         h('button', { class: 'btn', onClick: () => pickFile('.json', async f => {
           try { importBackup(await f.text()); toast('Резервная копия загружена'); redraw(); }
           catch (e) { toast('Ошибка: ' + e.message, 'err'); }
         }) }, '⤒ Загрузить копию'),
-        h('button', { class: 'btn danger', onClick: () => confirmBox('Удалить все данные приложения (списки, расписания, журналы, часы, настройки зарплаты)?', () => { resetAll(); toast('Данные очищены'); redraw(); }) }, '🗑 Очистить'),
+        h('button', { class: 'btn danger', onClick: () => confirmBox('Удалить ВСЕ данные приложения — включая все агломерации (списки, расписания, журналы), часы и настройки зарплаты?', () => { resetAll(); toast('Данные очищены'); redraw(); }) }, '🗑 Очистить'),
       )));
+
+    wrap.append(agglomerationSwitcher(st, redraw));
+    if (readOnly) {
+      wrap.append(h('div', { class: 'card', style: { marginBottom: '16px', padding: '12px 16px' } },
+        h('span', { class: 'muted' }, '🗄 Просмотр архивной агломерации — импорт и правки здесь недоступны. Новые данные по-прежнему пишутся в активную агломерацию.')));
+    }
 
     wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
       h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, '📋 Официальный журнал'),
@@ -45,24 +56,97 @@ export function render(root, params = {}) {
         ? 'Реальный состав и расписание — если отличаются от официальных сетевых документов. Список и коды никак не связаны с официальным журналом, кроме переноса оценок по совпадающим ФИО.'
         : 'Официальные сетевые документы школ — на них строится ведомость, часы по плану и переносятся оценки из фактического журнала.'));
 
-    wrap.append(studentsRow(st, redraw, kind));
-    wrap.append(scheduleCard(st, redraw, kind));
-    wrap.append(h('div', { style: { marginBottom: '16px' } }, mappingCard(st, redraw, kind)));
+    wrap.append(studentsRow(agg, redraw, kind, readOnly));
+    wrap.append(scheduleCard(agg, redraw, kind, readOnly));
+    wrap.append(h('div', { style: { marginBottom: '16px' } }, mappingCard(agg, redraw, kind, readOnly)));
     if (kind === 'official') {
       wrap.append(h('div', { style: { marginBottom: '16px' } }, planCard(st, redraw)));
-      wrap.append(programsCard(st, redraw));
+      wrap.append(programsCard(agg, redraw, readOnly));
     }
   }
 
   redraw();
 }
 
+/* ---------------- агломерации: список, переключение, создание ---------------- */
+// Агломерация — блок из трёх заездов с одним набором детей. Когда набор
+// сменяется на новый учебный период, заводится новая агломерация — прежняя
+// не стирается, а остаётся здесь в списке доступной для просмотра (только
+// чтение — писать можно только в активную, см. store.js: activeAgg/viewedAgg).
+function agglomerationSwitcher(st, redraw) {
+  const list = allAgglomerations(st);
+  const active = activeAgg(st);
+  const viewed = viewedAgg(st);
+
+  const pill = (agg) => {
+    const isActive = agg.id === active.id;
+    const isViewed = agg.id === viewed.id;
+    const n = agg.students?.stats?.students ?? 0;
+    return h('div', {
+      class: 'check-pill' + (isViewed ? ' on' : ''),
+      style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
+      onClick: () => { switchViewedAgglomeration(agg.id); redraw(); },
+    },
+      h('span', {}, agg.name),
+      h('span', { class: 'muted mono', style: { fontSize: '11px' } }, `${n} чел.`),
+      isActive ? h('span', { class: 'pill ok', style: { fontSize: '10.5px' } }, 'активна') : null,
+      h('button', {
+        class: 'btn sm ghost', title: 'Переименовать', style: { padding: '2px 6px' },
+        onClick: (e) => { e.stopPropagation(); renameModal(agg, redraw); },
+      }, '✎'),
+      (!isActive) ? h('button', {
+        class: 'btn sm ghost', title: 'Сделать активной — новые записи будут идти сюда', style: { padding: '2px 6px' },
+        onClick: (e) => {
+          e.stopPropagation();
+          confirmBox(`Сделать «${agg.name}» активной агломерацией? Все новые изменения (отметки, импорт, набор) будут идти в неё, пока не переключите снова.`,
+            () => { setActiveAgglomeration(agg.id); redraw(); });
+        },
+      }, '⇧ сделать активной') : null);
+  };
+
+  return h('div', { class: 'card', style: { marginBottom: '16px' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' } },
+      h('div', {},
+        h('h3', { style: { margin: '0 0 4px' } }, '📚 Агломерации'),
+        h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
+          'Каждая — свой набор детей на блок из трёх заездов. Прошлые остаются доступны для просмотра, писать можно только в активную.')),
+      h('button', { class: 'btn sm primary', onClick: () => newAgglomerationModal(redraw) }, '+ Новая агломерация')),
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' } }, ...list.map(pill)));
+}
+
+function newAgglomerationModal(redraw) {
+  const input = h('input', { type: 'text', placeholder: 'Например, «Агломерация 2»', value: '' });
+  modal({
+    title: '+ Новая агломерация',
+    body: h('div', {},
+      h('p', { class: 'muted', style: { marginTop: 0 } },
+        'Заводит новый, пустой набор данных (список, расписание, журнал, «Набор», КТП, ведомость) и делает его активным — все новые записи пойдут в него. Прежняя агломерация никуда не денется, останется доступна для просмотра выше.'),
+      h('label', { class: 'field' }, h('span', {}, 'Название'), input)),
+    okText: 'Создать и сделать активной',
+    onOk: () => { createAgglomeration(input.value); toast('Новая агломерация создана и стала активной'); redraw(); },
+  });
+}
+
+function renameModal(agg, redraw) {
+  const input = h('input', { type: 'text', value: agg.name });
+  modal({
+    title: 'Переименовать агломерацию',
+    body: h('label', { class: 'field' }, h('span', {}, 'Название'), input),
+    okText: 'Сохранить',
+    onOk: () => {
+      if (!input.value.trim()) { toast('Название не может быть пустым', 'err'); return false; }
+      renameAgglomeration(agg.id, input.value);
+      redraw();
+    },
+  });
+}
+
 /* ---------------- список обучающихся: строка + модальное окно ---------------- */
 // Полное содержимое (список, кнопки, загрузка файла) открывается в модалке —
 // на странице остаётся только сводная строка с числом детей и кнопкой
 // «Открыть», а не панель на всю высоту.
-function studentsRow(st, redraw, kind) {
-  const s = dataOf(st, kind).students;
+function studentsRow(agg, redraw, kind, readOnly) {
+  const s = dataOf(agg, kind).students;
   return h('div', { class: 'card', style: { marginBottom: '16px' } },
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' } },
       h('div', {},
@@ -79,7 +163,10 @@ function openStudentsModal(kind, outerRedraw) {
   const localRedraw = () => { outerRedraw(); render(); };
   function render() {
     wrap.innerHTML = '';
-    wrap.append(studentsCard(getState(), localRedraw, kind, { heading: null, onNavigate: () => closeModal?.() }));
+    const st = getState();
+    const agg = viewedAgg(st);
+    const readOnly = isViewingArchive(st);
+    wrap.append(studentsCard(agg, localRedraw, kind, { heading: null, onNavigate: () => closeModal?.(), readOnly }));
   }
   render();
   const { close } = modal({
@@ -90,11 +177,13 @@ function openStudentsModal(kind, outerRedraw) {
   closeModal = close;
 }
 
-function studentsCard(st, redraw, kind, opts = {}) {
-  const { heading = '1. Список обучающихся', onNavigate } = opts;
-  const s = dataOf(st, kind).students;
+function studentsCard(agg, redraw, kind, opts = {}) {
+  const { heading = '1. Список обучающихся', onNavigate, readOnly = false } = opts;
+  const s = dataOf(agg, kind).students;
   const { subj, grp } = uiKeys(kind);
   const body = h('div', {});
+  if (readOnly) body.append(h('p', { class: 'muted', style: { fontSize: '12.5px', marginTop: 0 } },
+    '🗄 Архивная агломерация — список показан только для просмотра.'));
   if (s) {
     body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Файл'), h('span', { class: 'v' }, s.sourceName || '—')));
     body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Предметов / групп / детей'),
@@ -104,7 +193,7 @@ function studentsCard(st, redraw, kind, opts = {}) {
       list.append(h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '10px 0 4px' } },
         h('span', { style: { fontSize: '13px', fontWeight: '700' } }, sub.title),
         sub.grade ? h('span', { class: 'pill cyan' }, sub.grade + ' класс') : null,
-        h('button', {
+        readOnly ? null : h('button', {
           class: 'btn sm danger ghost', title: 'Удалить предмет целиком',
           onClick: () => confirmBox(`Удалить «${sub.title}» со всеми группами? Отметки этих групп в журнале тоже пропадут.`,
             () => { removeSubject(sub.id, kind); toast('Предмет удалён'); redraw(); })
@@ -112,7 +201,7 @@ function studentsCard(st, redraw, kind, opts = {}) {
       list.append(h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
         ...sub.groups.map(g => h('span', { class: 'pill removable' },
           `${g.name} · ${g.students.length}`,
-          h('button', {
+          readOnly ? null : h('button', {
             class: 'pill-x', title: 'Убрать группу',
             onClick: () => confirmBox(`Убрать «${sub.title} · ${g.name}» (${g.students.length} чел.)? Отметки этой группы в журнале тоже пропадут.`,
               () => { removeGroup(g.id, kind); toast('Группа убрана'); redraw(); })
@@ -121,36 +210,39 @@ function studentsCard(st, redraw, kind, opts = {}) {
     body.append(list);
     body.append(h('div', { style: { display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' } },
       h('button', { class: 'btn sm', onClick: () => download('Обучающиеся.csv', studentsToCsv(s.subjects), 'text/csv;charset=utf-8') }, '⤓ Экспорт учеников (CSV)'),
-      h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, '⤒ Импорт учеников (CSV)'),
-      h('button', { class: 'btn sm', onClick: () => groupsDialog(redraw, false, kind) }, '☑ Выбрать группы'),
-      scheduleCodesExist(st, kind) ? h('button', {
+      readOnly ? null : h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, '⤒ Импорт учеников (CSV)'),
+      readOnly ? null : h('button', { class: 'btn sm', onClick: () => groupsDialog(redraw, false, kind) }, '☑ Выбрать группы'),
+      (!readOnly && scheduleCodesExist(agg, kind)) ? h('button', {
         class: 'btn sm', title: 'Убрать группы, которых нет в загруженном расписании',
         onClick: () => keepOnlyScheduled(redraw, kind)
       }, '⚡ Только мои по расписанию') : null,
       h('button', { class: 'btn sm', onClick: () => { onNavigate?.(); go('journal', kind === 'actual' ? { kind: 'actual' } : undefined); } }, 'Открыть журнал →'),
     ));
   }
-  if (!s) body.append(h('div', { style: { marginBottom: '10px' } },
-    h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, '⤒ Импорт учеников из CSV')));
-  body.append(fileDrop({
-    title: s ? 'Загрузить другой список обучающихся (.docx)' : 'Список обучающихся (.docx)',
-    hint: 'дети автоматически разбиваются по предметам и группам',
-    accept: '.docx',
-    onFile: async (file) => {
-      try {
-        const res = await importStudentsFile(file);
-        update(x => {
-          dataOf(x, kind).students = { ...res, importedAt: new Date().toISOString() };
-          x.ui[subj] = res.subjects[0]?.id || null;
-          x.ui[grp] = res.subjects[0]?.groups[0]?.id || null;
-        });
-        autoMapAll(kind);
-        toast(`Загружено: ${res.stats.groups} групп, ${res.stats.students} детей`);
-        redraw();
-        if (res.stats.groups > 1) groupsDialog(redraw, true, kind);
-      } catch (e) { console.error(e); toast('Ошибка импорта: ' + e.message, 'err'); }
-    },
-  }));
+  if (!readOnly) {
+    if (!s) body.append(h('div', { style: { marginBottom: '10px' } },
+      h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, '⤒ Импорт учеников из CSV')));
+    body.append(fileDrop({
+      title: s ? 'Загрузить другой список обучающихся (.docx)' : 'Список обучающихся (.docx)',
+      hint: 'дети автоматически разбиваются по предметам и группам',
+      accept: '.docx',
+      onFile: async (file) => {
+        try {
+          const res = await importStudentsFile(file);
+          update(x => {
+            const a = dataOf(activeAgg(x), kind);
+            a.students = { ...res, importedAt: new Date().toISOString() };
+            x.ui[subj] = res.subjects[0]?.id || null;
+            x.ui[grp] = res.subjects[0]?.groups[0]?.id || null;
+          });
+          autoMapAll(kind);
+          toast(`Загружено: ${res.stats.groups} групп, ${res.stats.students} детей`);
+          redraw();
+          if (res.stats.groups > 1) groupsDialog(redraw, true, kind);
+        } catch (e) { console.error(e); toast('Ошибка импорта: ' + e.message, 'err'); }
+      },
+    }));
+  }
   if (!heading) return body;
   return h('div', { class: 'card' }, h('h3', {}, heading), body);
 }
@@ -161,7 +253,7 @@ function pickCsv(redraw, kind) {
     try {
       const res = await importStudentsCsvFile(file);
       update(x => {
-        dataOf(x, kind).students = { ...res, importedAt: new Date().toISOString() };
+        dataOf(activeAgg(x), kind).students = { ...res, importedAt: new Date().toISOString() };
         x.ui[subj] = res.subjects[0]?.id || null;
         x.ui[grp] = res.subjects[0]?.groups[0]?.id || null;
       });
@@ -177,31 +269,33 @@ function pickCsv(redraw, kind) {
 
 const lastName = (fio) => (fio || '').trim().split(/\s+/)[0].toLowerCase();
 
-function scheduleCodesExist(st, kind) {
-  const data = dataOf(st, kind);
+function scheduleCodesExist(agg, kind) {
+  const data = dataOf(agg, kind);
   return SHIFTS.some(sh => (data.schedules[String(sh)]?.codes || []).length);
 }
 
-/** Оставляет только те группы, что встречаются в загруженном расписании. */
+/** Оставляет только те группы, что встречаются в загруженном расписании.
+ *  Вызывается только вне архива (кнопка скрыта в readOnly) — читает и пишет активную. */
 function keepOnlyScheduled(redraw, kind) {
-  const st = getState();
-  const data = dataOf(st, kind);
+  const agg = activeAgg(getState());
+  const data = dataOf(agg, kind);
   const codes = new Set();
   for (const sh of SHIFTS) for (const c of (data.schedules[String(sh)]?.codes || [])) codes.add(c);
   const keep = new Set();
   for (const [code, m] of Object.entries(data.mapping || {})) if (codes.has(code) && m?.groupId) keep.add(m.groupId);
   if (!keep.size) return toast('Ни одна группа не сопоставлена с расписанием — сначала настройте сопоставление', 'err');
-  const all = allGroups(st, kind);
+  const all = allGroups(agg, kind);
   const drop = all.filter(g => !keep.has(g.group.id));
   if (!drop.length) return toast('Лишних групп нет — все есть в расписании');
   confirmBox(`Убрать ${drop.length} групп(ы), которых нет в расписании: ${drop.map(g => g.group.name).slice(0, 6).join(', ')}${drop.length > 6 ? '…' : ''}?`,
     () => { keepGroups([...keep], kind); toast(`Убрано групп: ${drop.length}`); redraw(); });
 }
 
-/** Модалка «какие группы оставить». afterImport — открыта сразу после импорта. */
+/** Модалка «какие группы оставить». afterImport — открыта сразу после импорта.
+ *  Вызывается только вне архива (кнопка скрыта в readOnly) — читает и пишет активную. */
 function groupsDialog(redraw, afterImport = false, kind) {
-  const st = getState();
-  const all = allGroups(st, kind);
+  const agg = activeAgg(getState());
+  const all = allGroups(agg, kind);
   if (!all.length) return toast('Список обучающихся пуст', 'err');
   const checked = new Set(all.map(g => g.group.id));
   const body = h('div', {});
@@ -217,7 +311,7 @@ function groupsDialog(redraw, afterImport = false, kind) {
   const counter = h('span', { class: 'pill ok' }, '');
   const refresh = () => { counter.textContent = `оставить: ${checked.size} из ${all.length}`; };
 
-  const mapping = dataOf(st, kind).mapping || {};
+  const mapping = dataOf(agg, kind).mapping || {};
   for (const { subject, groups } of bySubject.values()) {
     const head = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', margin: '12px 0 6px' } },
       h('b', { style: { fontSize: '13px' } }, subject.title),
@@ -260,13 +354,15 @@ function groupsDialog(redraw, afterImport = false, kind) {
   });
 }
 
-/** Модалка фильтра расписания: педагоги и коды групп. */
+/** Модалка фильтра расписания: педагоги и коды групп.
+ *  Вызывается только вне архива (кнопка скрыта в readOnly) — читает и пишет активную. */
 function scheduleDialog(shift, redraw, afterImport = false, kind) {
   const st = getState();
-  const data = dataOf(st, kind);
+  const agg = activeAgg(st);
+  const data = dataOf(agg, kind);
   const sc = data.schedules[String(shift)];
   if (!sc) return;
-  const myLast = lastName(st.plan?.teacher || st.vedomostHeader?.teacher || '');
+  const myLast = lastName(st.plan?.teacher || agg.vedomostHeader?.teacher || '');
   const teachers = new Set(
     afterImport && myLast && sc.teachers.some(t => lastName(t) === myLast)
       ? sc.teachers.filter(t => lastName(t) === myLast)
@@ -329,7 +425,7 @@ function scheduleDialog(shift, redraw, afterImport = false, kind) {
       if (!teachers.size || !codes.size) { toast('Нужно оставить хотя бы одного педагога и одну группу', 'err'); return false; }
       filterSchedule(shift, { teachers: [...teachers], codes: [...codes] }, kind);
       autoMapAll(kind);
-      const left = dataOf(getState(), kind).schedules[String(shift)].lessons.length;
+      const left = dataOf(activeAgg(getState()), kind).schedules[String(shift)].lessons.length;
       toast(`В расписании ${shift} заезда осталось занятий: ${left}`);
       redraw();
     },
@@ -371,8 +467,8 @@ function planCard(st, redraw) {
 // Панель со всеми днями может стать длинной, поэтому на странице — только
 // сводная строка, а сама панель (форма + свёрнутые дни выбранного заезда)
 // открывается в модальном окне.
-function actualScheduleRow(st, redraw, kind) {
-  const data = dataOf(st, kind);
+function actualScheduleRow(agg, redraw, kind, readOnly) {
+  const data = dataOf(agg, kind);
   let days = 0, lessons = 0;
   for (const sh of SHIFTS) {
     const sc = data.schedules[String(sh)];
@@ -386,22 +482,22 @@ function actualScheduleRow(st, redraw, kind) {
         h('h3', { style: { margin: '0 0 4px' } }, '2. Расписание по дням'),
         h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
           days ? `${days} дн. внесено · ${lessons} занятий всего` : 'Школа обычно присылает расписание на завтра — вносите день за днём')),
-      h('button', { class: 'btn primary', onClick: () => openActualScheduleModal(redraw) }, days ? '🗓 Открыть' : '🗓 Внести день')));
+      h('button', { class: 'btn primary', onClick: () => openActualScheduleModal(redraw, readOnly) }, days ? '🗓 Открыть' : '🗓 Внести день')));
 }
 
-function openActualScheduleModal(outerRedraw) {
+function openActualScheduleModal(outerRedraw, readOnly) {
   modal({
     wide: true,
     title: 'Расписание по дням · Фактический журнал',
-    body: actualScheduleCard(outerRedraw),
+    body: actualScheduleCard(outerRedraw, readOnly),
     okText: null, cancelText: 'Закрыть',
   });
 }
 
-function scheduleCard(st, redraw, kind) {
-  if (kind === 'actual') return actualScheduleRow(st, redraw, kind);
+function scheduleCard(agg, redraw, kind, readOnly) {
+  if (kind === 'actual') return actualScheduleRow(agg, redraw, kind, readOnly);
 
-  const data = dataOf(st, kind);
+  const data = dataOf(agg, kind);
   const cards = SHIFTS.map(shift => {
     const sc = data.schedules[String(shift)];
     const body = h('div', {});
@@ -414,14 +510,15 @@ function scheduleCard(st, redraw, kind) {
       body.append(h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '10px 0' } },
         ...sc.codes.map(c => h('span', { class: 'pill' + (data.mapping[c] ? ' ok' : ' warn') }, c))));
       body.append(h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        h('button', { class: 'btn sm', onClick: () => scheduleDialog(shift, redraw, false, kind) }, '☑ Оставить только свои'),
+        readOnly ? null : h('button', { class: 'btn sm', onClick: () => scheduleDialog(shift, redraw, false, kind) }, '☑ Оставить только свои'),
         h('button', { class: 'btn sm', onClick: () => showLessons(sc, shift) }, 'Показать занятия'),
-        h('button', {
+        readOnly ? null : h('button', {
           class: 'btn sm danger', onClick: () => confirmBox(`Удалить расписание ${shift} заезда?`, () => {
-            update(x => { delete dataOf(x, kind).schedules[String(shift)]; }); redraw();
+            update(x => { delete dataOf(activeAgg(x), kind).schedules[String(shift)]; }); redraw();
           })
         }, 'Удалить')));
     }
+    if (readOnly) return h('div', { class: 'card' }, h('h3', {}, `Заезд ${shift}`, sc ? h('span', { class: 'pill ok', style: { marginLeft: '8px' } }, 'загружен') : null), body);
     body.append(fileDrop({
       title: sc ? `Заменить расписание ${shift} заезда` : `Расписание ${shift} заезда (.docx)`,
       hint: 'номер заезда определяется из шапки документа',
@@ -432,7 +529,7 @@ function scheduleCard(st, redraw, kind) {
           const detected = res.shift;
           const target = detected && detected !== shift
             ? await askShift(detected, shift) : shift;
-          update(x => { dataOf(x, kind).schedules[String(target)] = { ...res, importedAt: new Date().toISOString() }; });
+          update(x => { dataOf(activeAgg(x), kind).schedules[String(target)] = { ...res, importedAt: new Date().toISOString() }; });
           autoMapAll(kind);
           toast(`Расписание ${target} заезда загружено: ${res.lessons.length} занятий`);
           redraw();
@@ -478,12 +575,12 @@ function showLessons(sc, shift) {
 }
 
 /* ---------------- сопоставление кодов ---------------- */
-function mappingCard(st, redraw, kind) {
-  const data = dataOf(st, kind);
+function mappingCard(agg, redraw, kind, readOnly) {
+  const data = dataOf(agg, kind);
   const codes = new Set();
   for (const sh of SHIFTS) for (const c of (data.schedules[String(sh)]?.codes || [])) codes.add(c);
   const list = [...codes].sort();
-  const groups = allGroups(st, kind);
+  const groups = allGroups(agg, kind);
 
   if (!list.length) {
     return h('div', { class: 'card' }, h('h3', {}, '3. Сопоставление групп'),
@@ -494,10 +591,11 @@ function mappingCard(st, redraw, kind) {
     const p = parseCode(code);
     const cur = data.mapping[code];
     const sel = h('select', {
-      onChange: (e) => {
+      disabled: readOnly,
+      onChange: readOnly ? undefined : (e) => {
         const v = e.target.value;
         update(x => {
-          const root = dataOf(x, kind);
+          const root = dataOf(activeAgg(x), kind);
           if (!v) delete root.mapping[code];
           else { const [subjectId, groupId] = v.split('|'); root.mapping[code] = { subjectId, groupId }; }
         });
@@ -524,9 +622,9 @@ function mappingCard(st, redraw, kind) {
   return h('div', { class: 'card' },
     h('h3', {}, '3. Сопоставление кодов расписания с группами'),
     h('div', { class: 'card-sub' }, 'Коды вида «Т1 РШ7» связываются с группами из списка автоматически: буква — направление, цифра — номер группы, последняя цифра — класс. Проверьте и поправьте, где нужно.'),
-    h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
+    readOnly ? null : h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
       h('button', { class: 'btn sm', onClick: () => { const n = autoMapAll(kind); toast(n ? `Сопоставлено автоматически: ${n}` : 'Новых совпадений не найдено'); redraw(); } }, '⚡ Сопоставить автоматически'),
-      h('button', { class: 'btn sm danger ghost', onClick: () => { update(x => { dataOf(x, kind).mapping = {}; }); redraw(); } }, 'Сбросить сопоставление')),
+      h('button', { class: 'btn sm danger ghost', onClick: () => { update(x => { dataOf(activeAgg(x), kind).mapping = {}; }); redraw(); } }, 'Сбросить сопоставление')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'compact' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Код'), h('th', {}, 'Разбор'), h('th', {}, 'Заезды'), h('th', {}, 'Группа из списка'), h('th', {}, ''))),
       h('tbody', {}, ...rows))));

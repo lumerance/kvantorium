@@ -1,6 +1,6 @@
 // Счётчик часов по индивидуальному плану: сколько закрыто и что осталось.
 import { h, toast, statCard, progressBar, hoursFmt, dateRu, download, modal, confirmBox, fileDrop, emptyState } from '../core/ui.js';
-import { getState, update, lessonsForGroup, allGroups } from '../core/store.js';
+import { getState, update, lessonsForGroup, allGroups, viewedAgg } from '../core/store.js';
 import { importPlanFile } from '../parsers/plan.js';
 import { BASE_WORKS, QUICK_ACTIONS } from '../data/works.js';
 import { buildPlanReport } from '../exporters/plan-export.js';
@@ -242,12 +242,15 @@ function addEntry({ workId, kind, title, hours, note, date, subject, period }) {
   });
 }
 
-/** Подсказки для поля «Наименование»: строки плана + группы из журнала. */
+/** Подсказки для поля «Наименование»: строки плана + группы из журнала
+ *  (просматриваемой агломерации — план и списания часов общие на весь год,
+ *  а группы у каждой агломерации свои). */
 function subjectSuggestions(st) {
   const out = new Set();
   for (const sh of (st.plan?.sheets || [])) for (const e of sh.entries) if (e.name) out.add(e.name);
-  const groups = allGroups(st);
-  for (const [code, m] of Object.entries(st.mapping || {})) {
+  const agg = viewedAgg(st);
+  const groups = allGroups(agg);
+  for (const [code, m] of Object.entries(agg.mapping || {})) {
     if (groups.some(g => g.group.id === m?.groupId)) out.add(`Группа ${code}`);
   }
   return [...out];

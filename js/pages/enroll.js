@@ -8,8 +8,8 @@
 //    договора и Навигатора — это не набор, а реальный состав класса.
 // Хранится раздельно (st.enroll / st.actual.enroll), но одной и той же
 // логикой — как и всё остальное деление на kind в этом приложении.
-import { h, toast, download, confirmBox, modal, emptyState, progressBar, printElement, captureFocus, restoreFocus } from '../core/ui.js';
-import { getState, update } from '../core/store.js';
+import { h, toast, download, confirmBox, modal, emptyState, progressBar, printElement, captureFocus, restoreFocus, aggBadge } from '../core/ui.js';
+import { getState, update, viewedAgg, activeAgg, isViewingArchive } from '../core/store.js';
 import { parseCode } from '../parsers/schedule.js';
 import { SHIFTS, ENROLL_SUBJECT_ID } from './journal.js';
 import { go } from '../core/router.js';
@@ -27,8 +27,8 @@ const uiKeys = (kind) => (kind === 'actual'
   ? { subj: 'actualJournalSubject', grp: 'actualJournalGroup' }
   : { subj: 'journalSubject', grp: 'journalGroup' });
 
-const groupsOf = (st = getState(), kind = 'official') => dataOf(st, kind)?.groups || [];
-const findGroup = (id, st = getState(), kind = 'official') => groupsOf(st, kind).find(g => g.id === id) || null;
+const groupsOf = (st = viewedAgg(getState()), kind = 'official') => dataOf(st, kind)?.groups || [];
+const findGroup = (id, st = viewedAgg(getState()), kind = 'official') => groupsOf(st, kind).find(g => g.id === id) || null;
 const counts = (g) => ({
   n: g.students.length,
   contract: g.students.filter(s => s.contract).length,
@@ -83,7 +83,7 @@ function searchMatches(kind, query) {
   const q = norm(query).toLowerCase();
   const groupIds = new Set(), studentIds = new Set();
   if (q) {
-    for (const g of groupsOf(getState(), kind)) {
+    for (const g of groupsOf(viewedAgg(getState()), kind)) {
       for (const s of g.students) {
         if (s.fio.toLowerCase().includes(q)) { groupIds.add(g.id); studentIds.add(s.id); }
       }
@@ -92,14 +92,15 @@ function searchMatches(kind, query) {
   return { active: !!q, groupIds, studentIds };
 }
 
-/** Создаёт группу/класс, возвращает её id или null при ошибке (имя пустое/занято). */
+/** Создаёт группу/класс, возвращает её id или null при ошибке (имя пустое/занято).
+ *  Вызывается только вне архива (кнопки скрыты в readOnly) — пишет в активную. */
 function addGroup(name, program = '', code = null, kind = 'official') {
   const clean = norm(name);
   if (!clean) { toast('Впишите название группы', 'err'); return null; }
-  if (groupsOf(getState(), kind).some(g => g.name.toLowerCase() === clean.toLowerCase())) { toast(`Группа «${clean}» уже есть`, 'err'); return null; }
+  if (groupsOf(activeAgg(getState()), kind).some(g => g.name.toLowerCase() === clean.toLowerCase())) { toast(`Группа «${clean}» уже есть`, 'err'); return null; }
   const id = nextId('eg_');
   update(x => {
-    dataOf(x, kind).groups.push({ id, name: clean, program: norm(program), code: code || null, createdAt: new Date().toISOString(), students: [] });
+    dataOf(activeAgg(x), kind).groups.push({ id, name: clean, program: norm(program), code: code || null, createdAt: new Date().toISOString(), students: [] });
   });
   return id;
 }
@@ -137,41 +138,48 @@ export function render(root, params = {}) {
   function redraw() {
     const focusToken = captureFocus(wrap);
     const st = getState();
+    const agg = viewedAgg(st);
+    const readOnly = isViewingArchive(st);
     const isDO = kind === 'official';
     wrap.innerHTML = '';
     cards.clear();
 
     wrap.append(h('div', { class: 'page-head' },
       h('div', {},
-        h('h1', {}, isDO ? 'Набор в группы' : 'Классы фактического журнала'),
+        h('h1', {}, isDO ? 'Набор в группы' : 'Классы фактического журнала', aggBadge(agg, readOnly)),
         h('p', {}, isDO
           ? 'Группы дополнительного образования, которые вы набираете сами: состав правится по ходу набора, у каждого ребёнка отмечаются договор и заявление в Навигаторе.'
           : 'Классы, которых нет в официальных сетевых документах, — для фактического журнала: просто список детей, без договора и Навигатора.')),
       h('div', { class: 'head-actions' },
-        groupsOf(st, kind).length ? h('button', { class: 'btn', onClick: () => download(isDO ? 'Набор_группы_ДО.csv' : 'Фактические_классы.csv', toCsv(groupsOf(st, kind), isDO), 'text/csv;charset=utf-8') }, '⤓ CSV') : null,
-        groupsOf(st, kind).length ? h('button', { class: 'btn', onClick: () => printElement(printNode(groupsOf(st, kind), isDO)) }, '🖨 Печать списков') : null,
+        groupsOf(agg, kind).length ? h('button', { class: 'btn', onClick: () => download(isDO ? 'Набор_группы_ДО.csv' : 'Фактические_классы.csv', toCsv(groupsOf(agg, kind), isDO), 'text/csv;charset=utf-8') }, '⤓ CSV') : null,
+        groupsOf(agg, kind).length ? h('button', { class: 'btn', onClick: () => printElement(printNode(groupsOf(agg, kind), isDO)) }, '🖨 Печать списков') : null,
       )));
 
     wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
       h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, '📋 Официальный (ДО)'),
       h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, '📝 Фактический (классы)')));
 
-    if (groupsOf(st, kind).length) wrap.append(searchCard(kind, searchQuery, (v) => { searchQuery = v; redrawAndReveal(); }));
+    if (groupsOf(agg, kind).length) wrap.append(searchCard(kind, searchQuery, (v) => { searchQuery = v; redrawAndReveal(); }));
 
-    totalsBox = totalsCard(st, kind, isDO);
+    totalsBox = totalsCard(agg, kind, isDO);
     wrap.append(totalsBox);
-    wrap.append(addCard(st, redraw, kind, isDO, onGroupCreated));
+    if (readOnly) {
+      wrap.append(h('div', { class: 'card', style: { marginBottom: '16px', padding: '12px 16px' } },
+        h('span', { class: 'muted' }, '🗄 Архивная агломерация — состав групп показан только для просмотра.')));
+    } else {
+      wrap.append(addCard(agg, redraw, kind, isDO, onGroupCreated));
+    }
 
-    if (!groupsOf(st, kind).length) {
+    if (!groupsOf(agg, kind).length) {
       wrap.append(h('div', { class: 'card' }, emptyState('👥',
         isDO ? 'Пока ни одной группы. Заведите её сверху — вручную или одним кликом из кода расписания.'
              : 'Пока ни одного класса. Заведите его сверху — вручную или одним кликом из кода расписания.',
-        scheduleCodes(st, kind).length ? null : h('button', { class: 'btn primary', onClick: () => go('data', kind === 'actual' ? { kind: 'actual' } : undefined) }, 'Загрузить расписание →'))));
+        (readOnly || scheduleCodes(agg, kind).length) ? null : h('button', { class: 'btn primary', onClick: () => go('data', kind === 'actual' ? { kind: 'actual' } : undefined) }, 'Загрузить расписание →'))));
       return;
     }
 
     const list = h('div', {});
-    for (const g of groupsOf(st, kind)) list.append(mountCard(g));
+    for (const g of groupsOf(agg, kind)) list.append(mountCard(g));
     wrap.append(list);
     restoreFocus(wrap, focusToken);
   }
@@ -185,13 +193,14 @@ export function render(root, params = {}) {
   /** Карточка группы + её замена на месте, без перерисовки всей страницы. */
   function mountCard(g, focusAdd = false) {
     const isDO = kind === 'official';
+    const readOnly = isViewingArchive(getState());
     if (focusAdd) expanded.add(g.id);
     const { groupIds: hitGroups, studentIds: hitStudents } = searchMatches(kind, searchQuery);
     const isOpen = expanded.has(g.id) || hitGroups.has(g.id);
     const toggle = () => { isOpen ? expanded.delete(g.id) : expanded.add(g.id); remount(g.id); };
     const card = groupCard(g, {
       refresh: () => remount(g.id, true), reload: redraw, refreshTotals, kind, isDO, isOpen, toggle,
-      isSearchHit: hitGroups.has(g.id), hitStudents,
+      isSearchHit: hitGroups.has(g.id), hitStudents, readOnly,
     });
     cards.set(g.id, card);
     if (focusAdd) requestAnimationFrame(() => card.querySelector('.add-fio')?.focus());
@@ -199,7 +208,7 @@ export function render(root, params = {}) {
   }
 
   function remount(groupId, focusAdd) {
-    const fresh = findGroup(groupId, getState(), kind);
+    const fresh = findGroup(groupId, viewedAgg(getState()), kind);
     const old = cards.get(groupId);
     if (!old) return redraw();
     if (!fresh) { old.remove(); cards.delete(groupId); return redraw(); }
@@ -215,7 +224,7 @@ export function render(root, params = {}) {
   }
 
   function refreshTotals() {
-    const fresh = totalsCard(getState(), kind, kind === 'official');
+    const fresh = totalsCard(viewedAgg(getState()), kind, kind === 'official');
     totalsBox.replaceWith(fresh);
     totalsBox = fresh;
   }
@@ -326,19 +335,19 @@ function addCard(st, redraw, kind, isDO, onGroupCreated) {
 }
 
 /** Строка привязки группы к коду расписания — источник занятий для журнала. */
-function codeRow(g, st, refresh, kind) {
+function codeRow(g, st, refresh, kind, readOnly) {
   const codes = scheduleCodes(st, kind);
   const n = lessonsCountForCode(st, g.code, kind);
   return h('div', {
     style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '8px 0 4px', fontSize: '12.5px' },
   },
     h('span', { class: 'muted' }, '📅 Код в расписании:'),
-    codes.length
+    (codes.length && !readOnly)
       ? h('select', {
         class: 'mono', style: { width: 'auto' },
         onChange: (e) => {
           const v = e.target.value || null;
-          update(x => { const gr = dataOf(x, kind).groups.find(y => y.id === g.id); if (gr) gr.code = v; });
+          update(x => { const gr = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id); if (gr) gr.code = v; });
           refresh();
         },
       },
@@ -350,8 +359,8 @@ function codeRow(g, st, refresh, kind) {
 }
 
 /* ---------------- карточка группы: свёрнута по умолчанию, раскрывается по клику ---------------- */
-function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, toggle, isSearchHit, hitStudents }) {
-  const st = getState();
+function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, toggle, isSearchHit, hitStudents, readOnly }) {
+  const st = viewedAgg(getState());
   const c = counts(g);
 
   const sizePill = h('span', { class: isDO ? `pill ${sizeTone(c.n)}` : 'pill' }, `${c.n} чел.`);
@@ -361,7 +370,7 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
   // Пересчёт шапки без перерисовки таблицы — чекбоксы не теряют фокус,
   // а страница не прыгает к началу при каждой галочке.
   const recount = () => {
-    const fresh = findGroup(g.id, getState(), kind);
+    const fresh = findGroup(g.id, viewedAgg(getState()), kind);
     if (!fresh) return;
     const k = counts(fresh);
     sizePill.textContent = `${k.n} чел.`;
@@ -376,7 +385,7 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
   const toggleField = (studentId, field) => (e) => {
     const on = e.target.checked;
     update(x => {
-      const gr = dataOf(x, kind).groups.find(y => y.id === g.id);
+      const gr = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id);
       const stu = gr?.students.find(y => y.id === studentId);
       if (stu) stu[field] = on;
     });
@@ -386,36 +395,36 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
   const rows = g.students.map((s, i) => h('tr', { class: hitStudents?.has(s.id) ? 'row-hit' : '' },
     h('td', { class: 'num muted' }, i + 1),
     h('td', {}, h('input', {
-      type: 'text', value: s.fio, class: 'cell-input',
+      type: 'text', value: s.fio, class: 'cell-input', disabled: readOnly,
       onChange: (e) => {
         const v = norm(e.target.value);
         if (!v) { e.target.value = s.fio; return; }
         update(x => {
-          const stu = dataOf(x, kind).groups.find(y => y.id === g.id)?.students.find(y => y.id === s.id);
+          const stu = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id)?.students.find(y => y.id === s.id);
           if (stu) stu.fio = v;
         });
       },
     })),
     isDO ? h('td', { style: { textAlign: 'center' } }, h('input', {
-      type: 'checkbox', checked: !!s.contract, class: 'box', title: 'Договор сдан',
+      type: 'checkbox', checked: !!s.contract, class: 'box', title: 'Договор сдан', disabled: readOnly,
       onChange: toggleField(s.id, 'contract'),
     })) : null,
     isDO ? h('td', { style: { textAlign: 'center' } }, h('input', {
-      type: 'checkbox', checked: !!s.navigator, class: 'box', title: 'Заявление отправлено в Навигатор',
+      type: 'checkbox', checked: !!s.navigator, class: 'box', title: 'Заявление отправлено в Навигатор', disabled: readOnly,
       onChange: toggleField(s.id, 'navigator'),
     })) : null,
     h('td', {}, h('input', {
-      type: 'text', value: s.note || '', placeholder: '—', class: 'cell-input muted',
+      type: 'text', value: s.note || '', placeholder: '—', class: 'cell-input muted', disabled: readOnly,
       onChange: (e) => update(x => {
-        const stu = dataOf(x, kind).groups.find(y => y.id === g.id)?.students.find(y => y.id === s.id);
+        const stu = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id)?.students.find(y => y.id === s.id);
         if (stu) stu.note = norm(e.target.value);
       }),
     })),
-    h('td', {}, h('button', {
+    readOnly ? h('td', {}) : h('td', {}, h('button', {
       class: 'btn sm danger ghost', title: 'Убрать из группы',
       onClick: () => {
         update(x => {
-          const gr = dataOf(x, kind).groups.find(y => y.id === g.id);
+          const gr = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id);
           if (gr) gr.students = gr.students.filter(y => y.id !== s.id);
         });
         refresh();
@@ -432,7 +441,7 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
     if (!fio) return;
     if (g.students.some(s => s.fio.toLowerCase() === fio.toLowerCase())) { toast('Такой ребёнок в группе уже есть', 'err'); return; }
     update(x => {
-      const gr = dataOf(x, kind).groups.find(y => y.id === g.id);
+      const gr = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id);
       if (gr) gr.students.push({ id: nextId('es_'), fio, contract: false, navigator: false, note: '', addedAt: new Date().toISOString() });
     });
     addInput.value = '';
@@ -459,12 +468,12 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
     h('h3', { style: { margin: 0 } }, h('span', { class: 'mono' }, g.name)),
     sizePill, contractPill, navPill,
     h('span', { style: { flex: '1 1 auto' } }),
-    h('button', { class: 'btn sm ghost', onClick: stop(() => renameDialog(g, reload, kind, isDO)) }, '✎ Переименовать'),
-    h('button', { class: 'btn sm ghost', onClick: stop(() => printElement(printNode([findGroup(g.id, getState(), kind) || g], isDO))) }, '🖨 Печать'),
-    h('button', {
+    readOnly ? null : h('button', { class: 'btn sm ghost', onClick: stop(() => renameDialog(g, reload, kind, isDO)) }, '✎ Переименовать'),
+    h('button', { class: 'btn sm ghost', onClick: stop(() => printElement(printNode([findGroup(g.id, viewedAgg(getState()), kind) || g], isDO))) }, '🖨 Печать'),
+    readOnly ? null : h('button', {
       class: 'btn sm danger ghost',
       onClick: stop(() => confirmBox(`Удалить ${isDO ? 'группу' : 'класс'} «${g.name}»${g.students.length ? ` вместе со списком (${g.students.length} чел.)` : ''}?`, () => {
-        update(x => { dataOf(x, kind).groups = dataOf(x, kind).groups.filter(y => y.id !== g.id); });
+        update(x => { const a = dataOf(activeAgg(x), kind); a.groups = a.groups.filter(y => y.id !== g.id); });
         toast(`${isDO ? 'Группа' : 'Класс'} удалён${isDO ? 'а' : ''}`);
         reload();
       }))
@@ -472,17 +481,17 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
 
   const body = isOpen ? h('div', { style: { marginTop: '10px' } },
     g.program ? h('div', { class: 'card-sub', style: { marginTop: 0 } }, g.program) : null,
-    codeRow(g, st, refresh, kind),
+    codeRow(g, st, refresh, kind, readOnly),
     c.n ? table : h('p', { class: 'muted', style: { fontSize: '13px', margin: '10px 0' } }, 'Пока пусто — впишите первого ребёнка ниже.'),
-    h('datalist', { id: listId }, ...knownFio(st, kind).map(f => h('option', { value: f }))),
-    h('div', { class: 'row', style: { marginTop: '12px' } },
+    readOnly ? null : h('datalist', { id: listId }, ...knownFio(st, kind).map(f => h('option', { value: f }))),
+    readOnly ? null : h('div', { class: 'row', style: { marginTop: '12px' } },
       h('label', { class: 'field' }, h('span', {}, 'Добавить ребёнка'), addInput),
       h('button', { class: 'btn fixed', onClick: add }, '+ Добавить')),
-    isDO ? h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } },
+    readOnly ? null : (isDO ? h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } },
       c.n < MIN_SIZE ? `До нижней границы наполняемости не хватает ${MIN_SIZE - c.n} чел. (норма ${MIN_SIZE}–${MAX_SIZE}).`
         : c.n > MAX_SIZE ? `Перебор: в группе на ${c.n - MAX_SIZE} чел. больше нормы ${MIN_SIZE}–${MAX_SIZE}.`
           : `Наполняемость в норме (${MIN_SIZE}–${MAX_SIZE} чел.). Enter в поле ввода добавляет следующего.`)
-      : h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } }, 'Enter в поле ввода добавляет следующего ребёнка.'),
+      : h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } }, 'Enter в поле ввода добавляет следующего ребёнка.')),
   ) : null;
 
   return h('div', { class: 'card' + (isSearchHit ? ' search-hit' : ''), style: { marginBottom: '16px' } }, head, body);
@@ -500,9 +509,9 @@ function renameDialog(g, reload, kind, isDO) {
     onOk: () => {
       const name = norm(nameInput.value);
       if (!name) { toast('Название не может быть пустым', 'err'); return false; }
-      if (groupsOf(getState(), kind).some(x => x.id !== g.id && x.name.toLowerCase() === name.toLowerCase())) { toast(`${isDO ? 'Группа' : 'Класс'} «${name}» уже есть`, 'err'); return false; }
+      if (groupsOf(activeAgg(getState()), kind).some(x => x.id !== g.id && x.name.toLowerCase() === name.toLowerCase())) { toast(`${isDO ? 'Группа' : 'Класс'} «${name}» уже есть`, 'err'); return false; }
       update(x => {
-        const gr = dataOf(x, kind).groups.find(y => y.id === g.id);
+        const gr = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id);
         if (gr) { gr.name = name; gr.program = norm(progInput.value); }
       });
       reload();

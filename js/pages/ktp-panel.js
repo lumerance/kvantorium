@@ -5,7 +5,7 @@
 // официальному расписанию сразу собирается готовый текст на весь день —
 // остаётся нажать «скопировать» и вставить.
 import { h, toast, modal, confirmBox, fileDrop, copyText, dateRu } from '../core/ui.js';
-import { getState, update, allGroups } from '../core/store.js';
+import { getState, update, allGroups, activeAgg, viewedAgg } from '../core/store.js';
 import {
   importKtpFile, splitPastedTable, rowsFromMatrix, detectColumns,
   programHours, defaultShiftHours, slotsForShift,
@@ -33,8 +33,9 @@ const FIELD_LABELS = { no: '№', theme: 'Тема', content: 'Содержан�
  * @param {object} group группа журнала (обычная или из «Набора»)
  * @param {number} shift номер заезда
  * @param {Array} lessons занятия группы в этом заезде, по порядку
+ * @param {boolean} readOnly true в архивной агломерации — сдвиг по КТП не редактируется
  */
-export function ktpCard(st, group, shift, lessons, redraw) {
+export function ktpCard(st, group, shift, lessons, redraw, readOnly) {
   const program = programOf(st, group.id);
   if (!program) {
     return h('details', { class: 'acc no-print', style: { marginBottom: '14px' } },
@@ -70,15 +71,19 @@ export function ktpCard(st, group, shift, lessons, redraw) {
   /* сдвиг — если занятие переносили и темы «уехали» */
   const offsetLabel = h('b', { class: 'mono' }, String(offset));
   const setOffset = (v) => {
-    update(x => { x.ktpOffsets = x.ktpOffsets || {}; x.ktpOffsets[key] = Math.max(-slots.length, Math.min(slots.length, v)); });
+    update(x => {
+      const a = activeAgg(x);
+      a.ktpOffsets = a.ktpOffsets || {};
+      a.ktpOffsets[key] = Math.max(-slots.length, Math.min(slots.length, v));
+    });
     redraw();
   };
   body.append(h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '0 0 12px' } },
     h('span', { class: 'muted', style: { fontSize: '12.5px' } }, 'Сдвиг по КТП:'),
-    h('button', { class: 'btn sm ghost', onClick: () => setOffset(offset - 1) }, '−'),
+    readOnly ? null : h('button', { class: 'btn sm ghost', onClick: () => setOffset(offset - 1) }, '−'),
     offsetLabel,
-    h('button', { class: 'btn sm ghost', onClick: () => setOffset(offset + 1) }, '+'),
-    offset ? h('button', { class: 'btn sm ghost', onClick: () => setOffset(0) }, 'сбросить') : null,
+    readOnly ? null : h('button', { class: 'btn sm ghost', onClick: () => setOffset(offset + 1) }, '+'),
+    (!readOnly && offset) ? h('button', { class: 'btn sm ghost', onClick: () => setOffset(0) }, 'сбросить') : null,
     h('span', { class: 'muted', style: { fontSize: '12px' } }, '— если занятие переносили или отменяли')));
 
   for (const day of days) body.append(dayBlock(day));
@@ -162,63 +167,65 @@ function dayBlock(day) {
 
 /* ====================== карточка на странице «Данные» ====================== */
 
-export function programsCard(st, redraw) {
-  const programs = st.programs || [];
+export function programsCard(agg, redraw, readOnly) {
+  const programs = agg.programs || [];
   const body = h('div', {});
 
   if (!programs.length) {
     body.append(h('div', { class: 'card-sub', style: { marginTop: 0 } },
       'Программа с КТП привязывается к группам: дальше в журнале на каждый день заезда сразу будет готовый текст темы, типа и описания занятия — с кнопкой «скопировать» в электронный журнал.'));
   }
-  for (const p of programs) body.append(programBlock(p, st, redraw));
+  for (const p of programs) body.append(programBlock(p, agg, redraw, readOnly));
 
-  body.append(fileDrop({
-    title: programs.length ? 'Загрузить ещё одну программу (.docx)' : 'Учебная программа с КТП (.docx)',
-    hint: 'из документа берётся таблица КТП: тема, содержание, тип занятия, часы',
-    accept: '.docx',
-    onFile: async (file) => {
-      try {
-        const res = await importKtpFile(file);
-        const hours = res.rows.reduce((a, r) => a + r.hours, 0);
-        const prog = {
-          id: nextId('prog_'), name: res.name, sourceName: res.sourceName,
-          importedAt: new Date().toISOString(), shiftHours: defaultShiftHours(hours), rows: res.rows,
-        };
-        update(x => { x.programs = [...(x.programs || []), prog]; });
-        toast(`Программа загружена: ${res.rows.length} строк КТП, ${hours} ч`);
-        redraw();
-        assignModal(prog, redraw);
-      } catch (e) { console.error(e); toast('Ошибка импорта: ' + e.message, 'err'); }
-    },
-  }));
+  if (!readOnly) {
+    body.append(fileDrop({
+      title: programs.length ? 'Загрузить ещё одну программу (.docx)' : 'Учебная программа с КТП (.docx)',
+      hint: 'из документа берётся таблица КТП: тема, содержание, тип занятия, часы',
+      accept: '.docx',
+      onFile: async (file) => {
+        try {
+          const res = await importKtpFile(file);
+          const hours = res.rows.reduce((a, r) => a + r.hours, 0);
+          const prog = {
+            id: nextId('prog_'), name: res.name, sourceName: res.sourceName,
+            importedAt: new Date().toISOString(), shiftHours: defaultShiftHours(hours), rows: res.rows,
+          };
+          update(x => { const a = activeAgg(x); a.programs = [...(a.programs || []), prog]; });
+          toast(`Программа загружена: ${res.rows.length} строк КТП, ${hours} ч`);
+          redraw();
+          assignModal(prog, redraw);
+        } catch (e) { console.error(e); toast('Ошибка импорта: ' + e.message, 'err'); }
+      },
+    }));
 
-  body.append(h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' } },
-    h('button', { class: 'btn sm', onClick: () => pasteModal(redraw) }, '⤒ Вставить КТП таблицей (из PDF, Word, Excel)')));
-  body.append(h('p', { class: 'muted', style: { fontSize: '12px', margin: '10px 0 0' } },
-    'PDF напрямую пока не читается: откройте программу, выделите таблицу КТП, скопируйте и вставьте её кнопкой выше — колонки распознаются, а что не угадалось, поправите вручную.'));
+    body.append(h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' } },
+      h('button', { class: 'btn sm', onClick: () => pasteModal(redraw) }, '⤒ Вставить КТП таблицей (из PDF, Word, Excel)')));
+    body.append(h('p', { class: 'muted', style: { fontSize: '12px', margin: '10px 0 0' } },
+      'PDF напрямую пока не читается: откройте программу, выделите таблицу КТП, скопируйте и вставьте её кнопкой выше — колонки распознаются, а что не угадалось, поправите вручную.'));
+  }
 
   return h('div', { class: 'card' }, h('h3', {}, '5. Учебные программы (КТП)'), body);
 }
 
-function programBlock(program, st, redraw) {
+function programBlock(program, agg, redraw, readOnly) {
   const total = programHours(program);
   const split = program.shiftHours || defaultShiftHours(total);
   const splitSum = split.reduce((a, b) => a + (Number(b) || 0), 0);
-  const assigned = Object.entries(st.groupPrograms || {}).filter(([, pid]) => pid === program.id).map(([gid]) => gid);
+  const assigned = Object.entries(agg.groupPrograms || {}).filter(([, pid]) => pid === program.id).map(([gid]) => gid);
   const groupLabel = (gid) => {
-    const g = allGroups(st).find(x => x.group.id === gid);
+    const g = allGroups(agg).find(x => x.group.id === gid);
     if (g) return `${g.subject.title} · ${g.group.name}`;
-    const e = (st.enroll?.groups || []).find(x => x.id === gid);
+    const e = (agg.enroll?.groups || []).find(x => x.id === gid);
     return e ? `Набор · ${e.name}` : gid;
   };
 
   const setField = (patch) => update(x => {
-    const p = (x.programs || []).find(y => y.id === program.id);
+    const p = (activeAgg(x).programs || []).find(y => y.id === program.id);
     if (p) Object.assign(p, patch);
   });
 
   const shiftInput = (i) => h('input', {
-    type: 'text', inputmode: 'numeric', value: split[i] ?? 0, style: { width: '70px', textAlign: 'center' },
+    type: 'text', inputmode: 'numeric', value: split[i] ?? 0, style: { width: '70px', textAlign: 'center' }, disabled: readOnly,
     onChange: (e) => {
       const v = Math.max(0, parseInt(e.target.value, 10) || 0);
       const next = [...split]; next[i] = v;
@@ -230,16 +237,17 @@ function programBlock(program, st, redraw) {
   return h('div', { class: 'card', style: { marginBottom: '12px', background: 'rgba(255,255,255,.015)' } },
     h('div', { class: 'row' },
       h('label', { class: 'field' }, h('span', {}, 'Название программы'),
-        h('input', { type: 'text', value: program.name, onChange: (e) => { setField({ name: norm(e.target.value) || 'Учебная программа' }); redraw(); } })),
+        h('input', { type: 'text', value: program.name, disabled: readOnly, onChange: (e) => { setField({ name: norm(e.target.value) || 'Учебная программа' }); redraw(); } })),
       h('div', { class: 'fixed', style: { display: 'flex', gap: '8px', alignItems: 'flex-end' } },
-        h('button', { class: 'btn sm', onClick: () => ktpModal(program, redraw) }, '📋 Показать КТП'),
-        h('button', { class: 'btn sm', onClick: () => assignModal(program, redraw) }, `🔗 Группы (${assigned.length})`),
-        h('button', {
+        h('button', { class: 'btn sm', onClick: () => ktpModal(program, redraw, readOnly) }, '📋 Показать КТП'),
+        readOnly ? null : h('button', { class: 'btn sm', onClick: () => assignModal(program, redraw) }, `🔗 Группы (${assigned.length})`),
+        readOnly ? null : h('button', {
           class: 'btn sm danger ghost',
           onClick: () => confirmBox(`Удалить программу «${program.name}»? Привязки групп к ней тоже пропадут.`, () => {
             update(x => {
-              x.programs = (x.programs || []).filter(y => y.id !== program.id);
-              for (const [gid, pid] of Object.entries(x.groupPrograms || {})) if (pid === program.id) delete x.groupPrograms[gid];
+              const a = activeAgg(x);
+              a.programs = (a.programs || []).filter(y => y.id !== program.id);
+              for (const [gid, pid] of Object.entries(a.groupPrograms || {})) if (pid === program.id) delete a.groupPrograms[gid];
             });
             toast('Программа удалена'); redraw();
           })
@@ -250,7 +258,7 @@ function programBlock(program, st, redraw) {
       shiftInput(0), h('span', { class: 'muted' }, '+'), shiftInput(1), h('span', { class: 'muted' }, '+'), shiftInput(2),
       h('span', { class: splitSum === total ? 'pill ok' : 'pill warn' },
         splitSum === total ? `= ${total} ч, как в КТП` : `= ${splitSum} ч, а в КТП ${total} ч`),
-      h('button', { class: 'btn sm ghost', onClick: () => { setField({ shiftHours: defaultShiftHours(total) }); redraw(); } }, '↺ Как обычно'),
+      readOnly ? null : h('button', { class: 'btn sm ghost', onClick: () => { setField({ shiftHours: defaultShiftHours(total) }); redraw(); } }, '↺ Как обычно'),
     ),
     h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } },
       `${program.rows.length} строк КТП · ${total} ч · файл: ${program.sourceName || 'вставлено вручную'}`),
@@ -261,17 +269,17 @@ function programBlock(program, st, redraw) {
 }
 
 /* ---------- привязка к группам ---------- */
-function groupOptions(st) {
-  const out = allGroups(st).map(({ subject, group }) => ({ id: group.id, label: `${group.name} · ${group.students.length}`, section: subject.title }));
-  for (const g of st.enroll?.groups || []) out.push({ id: g.id, label: `${g.name} · ${g.students.length}`, section: 'Набор (ДО)' });
+function groupOptions(agg) {
+  const out = allGroups(agg).map(({ subject, group }) => ({ id: group.id, label: `${group.name} · ${group.students.length}`, section: subject.title }));
+  for (const g of agg.enroll?.groups || []) out.push({ id: g.id, label: `${g.name} · ${g.students.length}`, section: 'Набор (ДО)' });
   return out;
 }
 
 function assignModal(program, redraw) {
-  const st = getState();
-  const list = groupOptions(st);
+  const agg = activeAgg(getState());
+  const list = groupOptions(agg);
   if (!list.length) return toast('Сначала загрузите список обучающихся — привязывать программу пока не к чему', 'err');
-  const assigned = new Set(Object.entries(st.groupPrograms || {}).filter(([, pid]) => pid === program.id).map(([gid]) => gid));
+  const assigned = new Set(Object.entries(agg.groupPrograms || {}).filter(([, pid]) => pid === program.id).map(([gid]) => gid));
 
   const bySection = new Map();
   for (const g of list) {
@@ -286,7 +294,7 @@ function assignModal(program, redraw) {
     body.append(h('div', { style: { margin: '12px 0 6px' } }, h('b', { style: { fontSize: '13px' } }, section)));
     body.append(h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
       ...groups.map(g => {
-        const other = (st.programs || []).find(p => p.id !== program.id && (st.groupPrograms || {})[g.id] === p.id);
+        const other = (agg.programs || []).find(p => p.id !== program.id && (agg.groupPrograms || {})[g.id] === p.id);
         return h('label', { class: 'check-pill' },
           h('input', {
             type: 'checkbox', checked: assigned.has(g.id), style: { width: 'auto', margin: 0 },
@@ -302,10 +310,11 @@ function assignModal(program, redraw) {
     body, okText: 'Применить',
     onOk: () => {
       update(x => {
-        x.groupPrograms = x.groupPrograms || {};
+        const a = activeAgg(x);
+        a.groupPrograms = a.groupPrograms || {};
         for (const g of list) {
-          if (assigned.has(g.id)) x.groupPrograms[g.id] = program.id;
-          else if (x.groupPrograms[g.id] === program.id) delete x.groupPrograms[g.id];
+          if (assigned.has(g.id)) a.groupPrograms[g.id] = program.id;
+          else if (a.groupPrograms[g.id] === program.id) delete a.groupPrograms[g.id];
         }
       });
       toast(assigned.size ? `Программа привязана к группам: ${assigned.size}` : 'Привязки сняты');
@@ -315,35 +324,35 @@ function assignModal(program, redraw) {
 }
 
 /* ---------- просмотр и правка КТП ---------- */
-function ktpModal(program, redraw) {
+function ktpModal(program, redraw, readOnly) {
   const body = h('div', {});
   const tbody = h('tbody', {});
 
   const setRow = (rowId, patch) => update(x => {
-    const p = (x.programs || []).find(y => y.id === program.id);
+    const p = (activeAgg(x).programs || []).find(y => y.id === program.id);
     const r = p?.rows[rowId];
     if (r) Object.assign(r, patch);
   });
 
   const fill = () => {
     tbody.innerHTML = '';
-    const cur = (getState().programs || []).find(y => y.id === program.id);
+    const cur = (viewedAgg(getState()).programs || []).find(y => y.id === program.id);
     let hour = 0;
     (cur?.rows || []).forEach((r, i) => {
       const from = hour + 1; hour += Math.max(1, Number(r.hours) || 1);
       tbody.append(h('tr', {},
         h('td', { class: 'num muted mono' }, from === hour ? String(from) : `${from}–${hour}`),
-        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.theme, onChange: (e) => setRow(i, { theme: norm(e.target.value) }) })),
-        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.content, onChange: (e) => setRow(i, { content: norm(e.target.value) }) })),
-        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.type, onChange: (e) => setRow(i, { type: norm(e.target.value) }) })),
+        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.theme, disabled: readOnly, onChange: (e) => setRow(i, { theme: norm(e.target.value) }) })),
+        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.content, disabled: readOnly, onChange: (e) => setRow(i, { content: norm(e.target.value) }) })),
+        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.type, disabled: readOnly, onChange: (e) => setRow(i, { type: norm(e.target.value) }) })),
         h('td', {}, h('input', {
-          type: 'text', inputmode: 'numeric', class: 'cell-input', value: r.hours, style: { width: '56px', textAlign: 'center' },
+          type: 'text', inputmode: 'numeric', class: 'cell-input', value: r.hours, style: { width: '56px', textAlign: 'center' }, disabled: readOnly,
           onChange: (e) => { setRow(i, { hours: Math.max(1, parseInt(e.target.value, 10) || 1) }); fill(); },
         })),
-        h('td', {}, h('button', {
+        readOnly ? h('td', {}) : h('td', {}, h('button', {
           class: 'btn sm danger ghost', title: 'Удалить строку',
           onClick: () => {
-            update(x => { const p = (x.programs || []).find(y => y.id === program.id); if (p) p.rows.splice(i, 1); });
+            update(x => { const p = (activeAgg(x).programs || []).find(y => y.id === program.id); if (p) p.rows.splice(i, 1); });
             fill();
           }
         }, '×'))));
@@ -352,21 +361,21 @@ function ktpModal(program, redraw) {
   fill();
 
   body.append(h('p', { class: 'muted', style: { marginTop: 0 } },
-    'Первая колонка — какие часы программы занимает строка. Правки сохраняются сразу.'));
+    readOnly ? 'Архивная агломерация — КТП показано только для просмотра.' : 'Первая колонка — какие часы программы занимает строка. Правки сохраняются сразу.'));
   body.append(h('div', { class: 'table-wrap' }, h('table', { class: 'compact enroll-table' },
     h('thead', {}, h('tr', {},
       h('th', { style: { width: '70px' } }, 'Часы'), h('th', {}, 'Тема'), h('th', {}, 'Содержание'),
       h('th', { style: { width: '18%' } }, 'Тип занятия'), h('th', { style: { width: '70px' } }, 'Часов'), h('th', { style: { width: '44px' } }, ''))),
     tbody)));
-  body.append(h('div', { style: { marginTop: '10px' } },
+  if (!readOnly) body.append(h('div', { style: { marginTop: '10px' } },
     h('button', {
       class: 'btn sm', onClick: () => {
-        update(x => { const p = (x.programs || []).find(y => y.id === program.id); if (p) p.rows.push({ no: null, theme: '', content: '', type: '', hours: 1 }); });
+        update(x => { const p = (activeAgg(x).programs || []).find(y => y.id === program.id); if (p) p.rows.push({ no: null, theme: '', content: '', type: '', hours: 1 }); });
         fill();
       }
     }, '+ Строка')));
 
-  modal({ wide: true, title: `КТП · ${program.name}`, body, okText: 'Готово', onOk: () => redraw(), cancelText: 'Закрыть' });
+  modal({ wide: true, title: `КТП · ${program.name}`, body, okText: readOnly ? null : 'Готово', onOk: readOnly ? undefined : () => redraw(), cancelText: 'Закрыть' });
 }
 
 /* ---------- вставка КТП таблицей ---------- */
@@ -437,7 +446,7 @@ function pasteModal(redraw) {
         id: nextId('prog_'), name: 'Учебная программа', sourceName: '',
         importedAt: new Date().toISOString(), shiftHours: defaultShiftHours(hours), rows,
       };
-      update(x => { x.programs = [...(x.programs || []), prog]; });
+      update(x => { const a = activeAgg(x); a.programs = [...(a.programs || []), prog]; });
       toast(`Программа создана: ${rows.length} строк, ${hours} ч`);
       redraw();
       assignModal(prog, redraw);

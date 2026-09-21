@@ -129,6 +129,14 @@ export function emptyState(icon, text, action) {
   return h('div', { class: 'empty' }, h('div', { class: 'big' }, icon), h('div', {}, text), action ? h('div', { style: { marginTop: '16px' } }, action) : null);
 }
 
+/** Пилюля с названием текущей агломерации рядом с заголовком страницы;
+ *  в архивном просмотре — с явной пометкой «только чтение», чтобы не
+ *  перепутать с активной агломерацией, куда пишутся новые данные. */
+export function aggBadge(agg, readOnly) {
+  return h('span', { class: 'pill' + (readOnly ? ' warn' : ' cyan'), style: { marginLeft: '10px', verticalAlign: 'middle' } },
+    readOnly ? `🗄 ${agg.name} · архив` : agg.name);
+}
+
 /* ---------- сохранение фокуса при полной перерисовке (redraw) ---------- */
 // Страницы с «живым» пересчётом на onInput перерисовывают весь блок на каждое
 // нажатие клавиши — без этого поле теряло бы фокус (и вставка из буфера

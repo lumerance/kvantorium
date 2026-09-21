@@ -5,7 +5,7 @@
 // [заезд] = {lessons, codes, teachers, dates, …}) — так весь остальной код
 // (сопоставление кодов, журнал) работает с ним одинаково, без разбора kind.
 import { h, toast, confirmBox, dateRu } from '../core/ui.js';
-import { getState, update, autoMapAll } from '../core/store.js';
+import { getState, update, autoMapAll, viewedAgg, activeAgg } from '../core/store.js';
 
 const SHIFTS = [1, 2, 3];
 const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
@@ -46,11 +46,11 @@ function recalcMeta(sc) {
   sc.dates = [...new Set(sc.lessons.map(l => l.date))].sort();
 }
 
-/** Уже внесённые дни по всем заездам, новые сверху. */
-function allDays(st) {
+/** Уже внесённые дни по всем заездам, новые сверху. agg — просматриваемая агломерация. */
+function allDays(agg) {
   const out = [];
   for (const sh of SHIFTS) {
-    const sc = st.actual.schedules[String(sh)];
+    const sc = agg.actual.schedules[String(sh)];
     if (!sc) continue;
     const byDate = new Map();
     for (const l of sc.lessons) {
@@ -64,9 +64,9 @@ function allDays(st) {
   return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function knownCodes(st) {
+function knownCodes(agg) {
   const set = new Set();
-  for (const sh of SHIFTS) for (const c of (st.actual.schedules[String(sh)]?.codes || [])) set.add(c);
+  for (const sh of SHIFTS) for (const c of (agg.actual.schedules[String(sh)]?.codes || [])) set.add(c);
   return [...set].sort();
 }
 
@@ -78,8 +78,10 @@ function knownCodes(st) {
  * @param {() => void} outerRedraw redraw() всей страницы «Данные» — вызывается
  * после сохранения/удаления дня, чтобы карточка «Сопоставление групп» ниже
  * увидела новые коды (сама панель перерисовывает только себя).
+ * @param {boolean} readOnly true в архивной агломерации — форма ввода и
+ * правка/удаление дней скрыты, список дней показывается только для просмотра.
  */
-export function actualScheduleCard(outerRedraw) {
+export function actualScheduleCard(outerRedraw, readOnly) {
   const wrap = h('div', {});
   let lastShift = 1;
   let draft = null;  // { date, shift, lessons:[{no,time,code,dir,teacher}], editKey:{shift,date}|null }
@@ -94,10 +96,20 @@ export function actualScheduleCard(outerRedraw) {
 
   function render() {
     wrap.innerHTML = '';
-    wrap.append(h('div', { class: 'card', style: { marginBottom: '14px' } }, formBody()));
-    const days = allDays(getState()).filter(d => d.shift === draft.shift);
+    const agg = viewedAgg(getState());
+    if (readOnly) {
+      wrap.append(h('div', { class: 'card', style: { marginBottom: '14px', padding: '12px 16px' } },
+        h('span', { class: 'muted' }, '🗄 Архивная агломерация — расписание по дням показано только для просмотра.')));
+    } else {
+      wrap.append(h('div', { class: 'card', style: { marginBottom: '14px' } }, formBody()));
+    }
+    const days = allDays(agg).filter(d => d.shift === draft.shift);
     wrap.append(h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0 10px' } },
       h('h3', { style: { fontSize: '14px', margin: 0 } }, `Внесённые дни · ${draft.shift} заезд`),
+      readOnly ? h('div', { class: 'tabs', style: { padding: '4px' } }, ...SHIFTS.map(s => h('button', {
+        class: 'tab' + (draft.shift === s ? ' active' : ''),
+        onClick: () => { draft.shift = s; render(); },
+      }, `${s} заезд`))) : null,
       h('span', { class: 'badge' }, days.length || '—')));
     if (days.length) {
       for (const d of days) wrap.append(dayRow(d));
@@ -109,11 +121,11 @@ export function actualScheduleCard(outerRedraw) {
 
   /* ---------------- форма «добавить/изменить день» ---------------- */
   function formBody() {
-    const st = getState();
+    const agg = viewedAgg(getState());
     // подсказки — и уже сохранённые коды, и то, что уже добавлено в этот
     // черновик: иначе после первого занятия группы не по чему кликнуть,
     // чтобы быстро добавить ей ещё один урок подряд
-    const codes = [...new Set([...knownCodes(st), ...draft.lessons.map(l => l.code)])].sort();
+    const codes = [...new Set([...knownCodes(agg), ...draft.lessons.map(l => l.code)])].sort();
 
     const dateInput = h('input', { type: 'date', value: draft.date, onChange: (e) => { draft.date = e.target.value; } });
     const shiftTabs = h('div', { class: 'tabs', style: { padding: '4px' } }, ...SHIFTS.map(s => h('button', {
@@ -168,14 +180,15 @@ export function actualScheduleCard(outerRedraw) {
       if (!draft.lessons.length) { toast('Добавьте хотя бы одно занятие', 'err'); return; }
       lastShift = draft.shift;
       update(x => {
+        const a = activeAgg(x);
         // при правке дня сперва убираем его старые занятия — дата или заезд
         // могли поменяться
         if (draft.editKey) {
-          const old = x.actual.schedules[String(draft.editKey.shift)];
+          const old = a.actual.schedules[String(draft.editKey.shift)];
           if (old) { old.lessons = old.lessons.filter(l => l.date !== draft.editKey.date); recalcMeta(old); }
         }
         const key = String(draft.shift);
-        const sc = x.actual.schedules[key] || (x.actual.schedules[key] = {
+        const sc = a.actual.schedules[key] || (a.actual.schedules[key] = {
           shift: draft.shift, sourceName: 'Внесено вручную по дням', teachers: [], codes: [], dates: [], weeks: [], notes: [], lessons: [],
         });
         const ranks = timeRanks(draft.lessons);
@@ -235,7 +248,7 @@ export function actualScheduleCard(outerRedraw) {
       h('span', { class: 'muted' }, d.weekday || weekdayOf(d.date)),
       h('span', { class: 'pill ok' }, `${d.lessons.length} ${plural(d.lessons.length, 'занятие', 'занятия', 'занятий')}`),
       h('span', { style: { flex: '1 1 auto' } }),
-      h('button', {
+      readOnly ? null : h('button', {
         class: 'btn sm ghost', title: 'Изменить', onClick: (e) => {
           e.stopPropagation();
           draft = { date: d.date, shift: d.shift, lessons: d.lessons.map(l => ({ time: l.time, code: l.code, dir: l.direction || '' })), editKey: { shift: d.shift, date: d.date } };
@@ -243,15 +256,15 @@ export function actualScheduleCard(outerRedraw) {
           wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }, '✎'),
-      h('button', {
+      readOnly ? null : h('button', {
         class: 'btn sm danger ghost', title: 'Удалить', onClick: (e) => {
           e.stopPropagation();
           confirmBox(`Удалить день ${dateRu(d.date)} (${d.lessons.length} ${plural(d.lessons.length, 'занятие', 'занятия', 'занятий')})?`, () => {
             update(x => {
-              const sc = x.actual.schedules[String(d.shift)];
+              const sc = activeAgg(x).actual.schedules[String(d.shift)];
               if (!sc) return;
               sc.lessons = sc.lessons.filter(l => l.date !== d.date);
-              if (!sc.lessons.length) delete x.actual.schedules[String(d.shift)];
+              if (!sc.lessons.length) delete activeAgg(x).actual.schedules[String(d.shift)];
               else recalcMeta(sc);
             });
             expanded.delete(key);

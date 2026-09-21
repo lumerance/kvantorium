@@ -1,6 +1,6 @@
 // Обзорная страница: состояние импортов, ближайшие занятия, часы и зарплата одним взглядом.
-import { h, statCard, hoursFmt, money0, dateRu, emptyState, WEEKDAY_SHORT, MONTHS } from '../core/ui.js';
-import { getState, lessonsForGroup, allGroups } from '../core/store.js';
+import { h, statCard, hoursFmt, money0, dateRu, emptyState, WEEKDAY_SHORT, MONTHS, aggBadge } from '../core/ui.js';
+import { getState, lessonsForGroup, allGroups, viewedAgg, isViewingArchive } from '../core/store.js';
 import { computeHours } from './hours.js';
 import { calcAll, RATE_LABELS } from './salary.js';
 import { go } from '../core/router.js';
@@ -8,6 +8,8 @@ import { SHIFTS } from './journal.js';
 
 export function render(root) {
   const st = getState();
+  const agg = viewedAgg(st);
+  const readOnly = isViewingArchive(st);
   const c = computeHours(st);
   const s = st.salary;
   const r = calcAll({ base: s.base, intensive: s.intensive, quality: s.quality, gph: s.gph, ndfl: s.ndfl, district: s.district, north: s.north, workDays: s.workDays, rv: s.rv, rate: s.rate, hasGph: s.hasGph });
@@ -15,17 +17,17 @@ export function render(root) {
 
   root.append(h('div', { class: 'page-head' },
     h('div', {},
-      h('h1', {}, 'Рабочий стол педагога'),
+      h('h1', {}, 'Рабочий стол педагога', aggBadge(agg, readOnly)),
       h('p', {}, 'Журнал, часы по индивидуальному плану и расчёт зарплаты — в одном месте. Данные хранятся только в этом браузере.')),
     h('div', { class: 'head-actions' },
       h('button', { class: 'btn primary', onClick: () => go('data') }, '⤒ Импорт документов'))));
 
-  const groups = allGroups(st);
-  const loadedShifts = SHIFTS.filter(sh => st.schedules[String(sh)]);
-  const marksCount = countMarks(st);
+  const groups = allGroups(agg);
+  const loadedShifts = SHIFTS.filter(sh => agg.schedules[String(sh)]);
+  const marksCount = countMarks(agg);
 
   root.append(h('div', { class: 'grid cols-4', style: { marginBottom: '16px' } },
-    statCard('Групп в журнале', String(groups.length), `${st.students?.stats.students || 0} обучающихся`),
+    statCard('Групп в журнале', String(groups.length), `${agg.students?.stats.students || 0} обучающихся`),
     statCard('Заездов загружено', `${loadedShifts.length} / 3`, loadedShifts.length ? `заезды: ${loadedShifts.join(', ')}` : 'расписание не загружено', 'cyan'),
     statCard('Закрыто часов', hoursFmt(c.total.done), `из ${hoursFmt(c.norm)} · осталось ${hoursFmt(Math.max(0, c.norm - c.total.done))}`, 'amber'),
     statCard('Зарплата на руки', money0(r.withGph), `${formatLabel} · ${MONTHS[s.month - 1]} ${s.year}`, ''),
@@ -35,9 +37,9 @@ export function render(root) {
     h('div', { class: 'card' },
       h('h3', {}, 'Готовность к работе'),
       checklist([
-        [!!st.students, 'Список обучающихся импортирован', st.students ? `${st.students.stats.groups} групп` : 'нужен docx со списком детей'],
+        [!!agg.students, 'Список обучающихся импортирован', agg.students ? `${agg.students.stats.groups} групп` : 'нужен docx со списком детей'],
         [loadedShifts.length > 0, 'Расписание заездов загружено', `${loadedShifts.length} из 3 заездов`],
-        [Object.keys(st.mapping).length > 0, 'Группы сопоставлены с расписанием', `${Object.keys(st.mapping).length} кодов связано`],
+        [Object.keys(agg.mapping).length > 0, 'Группы сопоставлены с расписанием', `${Object.keys(agg.mapping).length} кодов связано`],
         [!!st.plan, 'Индивидуальный план импортирован', st.plan ? `${Math.round(st.plan.totals.all)} ч по плану` : 'нужен xlsx с планом'],
         [marksCount > 0, 'Отметки в журнале', `${marksCount} отметок`],
       ]),
@@ -46,7 +48,7 @@ export function render(root) {
         h('button', { class: 'btn sm', onClick: () => go('journal') }, 'Журнал'),
         h('button', { class: 'btn sm', onClick: () => go('hours') }, 'Часы'),
         h('button', { class: 'btn sm', onClick: () => go('salary') }, 'Зарплата'))),
-    upcomingCard(st),
+    upcomingCard(agg),
   ));
 
   root.append(h('div', { class: 'grid cols-2' },
