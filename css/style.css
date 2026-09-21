@@ -30,23 +30,28 @@
   --topbar-bg:rgba(6,10,14,.82);
   --dropdown-bg:#0a1017;
   --toast-bg:rgba(9,15,20,.96);
+  /* цвет текста поверх сплошного акцентного фона (кнопка «primary», активная
+     вкладка, отмеченный чекбокс) — тёмный в тёмной теме, потому что фон там
+     яркий неон; в светлой теме фон темнее, поэтому текст там белый (см. ниже) */
+  --on-accent:#04120a;
 }
 /* Светлая тема — переключается кнопкой в шапке (js/core/theme.js), выбор
    хранится в localStorage. Акцентные цвета в светлой теме — не те же самые
    yellow/orange из тёмной (они «неоновые», рассчитаны на контраст с почти
    чёрным фоном и на белом фоне нечитаемы), а более глубокие, но узнаваемые
-   того же оттенка — подобраны так, чтобы обычный текст ими читался. */
+   того же оттенка — подобраны так, чтобы обычный текст ими читался. Фон —
+   не чистый белый, а приглушённый светло-зелёный, чтобы не слепил. */
 :root[data-theme="light"]{
-  --bg:#eef3f1;
-  --bg-2:#e6ece9;
-  --panel:#ffffff;
-  --panel-2:#f7fbf9;
-  --line:#d3ded9;
-  --line-soft:#e2eae6;
-  --text:#12241d;
-  --muted:#54695f;
-  --neon:#047857;
-  --neon-dim:#036b4d;
+  --bg:#e7efeb;
+  --bg-2:#dee8e2;
+  --panel:#f4f9f6;
+  --panel-2:#edf5f0;
+  --line:#cbdad2;
+  --line-soft:#dae6e0;
+  --text:#0f2019;
+  --muted:#4f6a5e;
+  --neon:#059669;
+  --neon-dim:#047a56;
   --cyan:#0e7490;
   --magenta:#a21caf;
   --amber:#b45309;
@@ -55,14 +60,18 @@
   --yellow:#a16207;
   --green:#4d7c0f;
   --green-bright:#15803d;
-  --shadow-neon:0 0 0 1px rgba(4,120,87,.3), 0 0 12px rgba(4,120,87,.16), 0 0 26px rgba(4,120,87,.08);
-  --input-bg:#f3f7f5;
-  --table-head-bg:#eef3f1;
-  --sticky-hover-bg:#e2ece7;
-  --table-wrap-bg:#ffffff;
-  --topbar-bg:rgba(255,255,255,.86);
-  --dropdown-bg:#ffffff;
-  --toast-bg:rgba(255,255,255,.97);
+  --shadow-neon:0 0 0 1px rgba(5,150,105,.32), 0 0 12px rgba(5,150,105,.18), 0 0 26px rgba(5,150,105,.09);
+  --input-bg:#e9f1ec;
+  --table-head-bg:#e3ede7;
+  --sticky-hover-bg:#d8e6de;
+  --table-wrap-bg:#f4f9f6;
+  --topbar-bg:rgba(244,249,246,.88);
+  --dropdown-bg:#f4f9f6;
+  --toast-bg:rgba(244,249,246,.97);
+  /* фон кнопки/вкладки/чекбокса в светлой теме — насыщенный, но не яркий
+     зелёный (иначе текст на белом нечитаем), поэтому текст поверх него —
+     белый, а не тёмный, как в тёмной теме */
+  --on-accent:#ffffff;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -129,7 +138,7 @@ body{
   text-shadow:0 0 10px rgba(43,255,139,.55);
 }
 .nav-btn.active{
-  color:#04120a;background:linear-gradient(180deg,var(--neon),var(--neon-dim));
+  color:var(--on-accent);background:linear-gradient(180deg,var(--neon),var(--neon-dim));
   border-color:transparent;box-shadow:0 0 22px rgba(43,255,139,.45);
 }
 /* пункт навигации с выпадающим списком (Журнал: Фактический / Официальный) */
@@ -214,8 +223,8 @@ body{
   box-shadow:var(--shadow-neon);background:rgba(43,255,139,.07);text-shadow:0 0 10px rgba(43,255,139,.5);
 }
 .btn:active{transform:translateY(0)}
-.btn.primary{color:#04120a;background:linear-gradient(180deg,var(--neon),var(--neon-dim));border-color:transparent}
-.btn.primary:hover{color:#04120a;box-shadow:0 0 26px rgba(43,255,139,.55);text-shadow:none}
+.btn.primary{color:var(--on-accent);background:linear-gradient(180deg,var(--neon),var(--neon-dim));border-color:transparent}
+.btn.primary:hover{color:var(--on-accent);box-shadow:0 0 26px rgba(43,255,139,.55);text-shadow:none}
 .btn.ghost{background:transparent}
 .btn.danger:hover{color:var(--red);border-color:rgba(255,79,94,.6);box-shadow:0 0 0 1px rgba(255,79,94,.35),0 0 18px rgba(255,79,94,.3);text-shadow:0 0 10px rgba(255,79,94,.5)}
 .btn.sm{padding:6px 11px;font-size:12.5px;border-radius:8px}
@@ -256,7 +265,7 @@ label.field span{letter-spacing:.3px}
   border:1px solid transparent;background:transparent;transition:all .22s;white-space:nowrap;
 }
 .tab:hover{color:var(--neon);border-color:rgba(43,255,139,.45);box-shadow:0 0 14px rgba(43,255,139,.22);text-shadow:0 0 8px rgba(43,255,139,.45)}
-.tab.active{color:#04120a;background:linear-gradient(180deg,var(--neon),var(--neon-dim));box-shadow:0 0 18px rgba(43,255,139,.35)}
+.tab.active{color:var(--on-accent);background:linear-gradient(180deg,var(--neon),var(--neon-dim));box-shadow:0 0 18px rgba(43,255,139,.35)}
 .tab .badge{font-family:var(--mono);font-size:11px;opacity:.75;margin-left:5px}
 .tabs.sub .tab{font-size:12.5px;padding:5px 11px}
 
@@ -298,6 +307,15 @@ table.compact th,table.compact td{padding:5px 8px;font-size:12.5px}
 .mark.m-3{color:#180b02;background:linear-gradient(180deg,var(--orange),#e8791f);border-color:transparent;box-shadow:0 0 12px rgba(255,155,66,.4)}
 .mark.m-4{color:#161200;background:linear-gradient(180deg,var(--yellow),#e0c31a);border-color:transparent;box-shadow:0 0 12px rgba(255,224,73,.35)}
 .mark.m-5{color:#02140a;background:linear-gradient(180deg,var(--green-bright),#12d963);border-color:transparent;box-shadow:0 0 16px rgba(34,255,122,.55)}
+/* В тёмной теме оба конца градиента — яркие, тёмный текст читается везде.
+   В светлой теме var(--red)/--orange/--yellow/--green-bright — уже глубокие
+   (см. :root[data-theme="light"] выше), а второй конец градиента остался
+   ярким хардкодом — со светлым текстом низ читался бы, а верх нет. Поэтому
+   в светлой теме у обоих концов градиента одна и та же глубина, и текст — белый. */
+:root[data-theme="light"] .mark.m-2{color:#fff;background:linear-gradient(180deg,var(--red),#991b1b)}
+:root[data-theme="light"] .mark.m-3{color:#fff;background:linear-gradient(180deg,var(--orange),#9a3412)}
+:root[data-theme="light"] .mark.m-4{color:#fff;background:linear-gradient(180deg,var(--yellow),#854d0e)}
+:root[data-theme="light"] .mark.m-5{color:#fff;background:linear-gradient(180deg,var(--green-bright),#166534)}
 .avg{font-family:var(--mono);font-weight:600}
 .avg.g2{color:var(--red)}.avg.g3{color:var(--orange)}.avg.g4{color:var(--yellow)}.avg.g5{color:var(--green-bright)}
 .avg.none{color:var(--muted)}
@@ -500,6 +518,6 @@ input.box{
 input.box:hover{border-color:rgba(43,255,139,.6);box-shadow:0 0 10px rgba(43,255,139,.25)}
 input.box:checked{background:linear-gradient(180deg,var(--neon),var(--neon-dim));border-color:transparent;
   box-shadow:0 0 12px rgba(43,255,139,.45)}
-input.box:checked::after{content:'✓';color:#04120a;font-size:12px;font-weight:800;line-height:1}
+input.box:checked::after{content:'✓';color:var(--on-accent);font-size:12px;font-weight:800;line-height:1}
 .btn.muted-btn{opacity:.5}
 .btn.muted-btn:hover{opacity:1}
