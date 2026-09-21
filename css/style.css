@@ -1,4 +1,4 @@
-/* ===== Кванториум-28 · тёмная неоновая тема ===== */
+/* ===== Кванториум-28 · тёмная неоновая тема (по умолчанию) + светлая ===== */
 :root{
   --bg:#04070a;
   --bg-2:#080d12;
@@ -22,6 +22,47 @@
   --shadow-neon:0 0 0 1px rgba(43,255,139,.35), 0 0 18px rgba(43,255,139,.28), 0 0 42px rgba(43,255,139,.12);
   --font:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  /* элементы хрома, у которых в тёмной теме свой оттенок отдельно от --panel/--bg */
+  --input-bg:#070c11;
+  --table-head-bg:#0a1218;
+  --sticky-hover-bg:#0d1a20;
+  --table-wrap-bg:#070c10;
+  --topbar-bg:rgba(6,10,14,.82);
+  --dropdown-bg:#0a1017;
+  --toast-bg:rgba(9,15,20,.96);
+}
+/* Светлая тема — переключается кнопкой в шапке (js/core/theme.js), выбор
+   хранится в localStorage. Акцентные цвета в светлой теме — не те же самые
+   yellow/orange из тёмной (они «неоновые», рассчитаны на контраст с почти
+   чёрным фоном и на белом фоне нечитаемы), а более глубокие, но узнаваемые
+   того же оттенка — подобраны так, чтобы обычный текст ими читался. */
+:root[data-theme="light"]{
+  --bg:#eef3f1;
+  --bg-2:#e6ece9;
+  --panel:#ffffff;
+  --panel-2:#f7fbf9;
+  --line:#d3ded9;
+  --line-soft:#e2eae6;
+  --text:#12241d;
+  --muted:#54695f;
+  --neon:#047857;
+  --neon-dim:#036b4d;
+  --cyan:#0e7490;
+  --magenta:#a21caf;
+  --amber:#b45309;
+  --red:#dc2626;
+  --orange:#c2410c;
+  --yellow:#a16207;
+  --green:#4d7c0f;
+  --green-bright:#15803d;
+  --shadow-neon:0 0 0 1px rgba(4,120,87,.3), 0 0 12px rgba(4,120,87,.16), 0 0 26px rgba(4,120,87,.08);
+  --input-bg:#f3f7f5;
+  --table-head-bg:#eef3f1;
+  --sticky-hover-bg:#e2ece7;
+  --table-wrap-bg:#ffffff;
+  --topbar-bg:rgba(255,255,255,.86);
+  --dropdown-bg:#ffffff;
+  --toast-bg:rgba(255,255,255,.97);
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -43,10 +84,13 @@ body{
              radial-gradient(40% 60% at 60% 60%,rgba(255,79,216,.06),transparent 65%);
   filter:blur(20px);
 }
+/* на белом фоне та же сетка/засветка выглядят пятнами — приглушаем */
+:root[data-theme="light"] .bg-grid{opacity:.16}
+:root[data-theme="light"] .bg-glow{opacity:.4}
 /* ================= TOPBAR ================= */
 .topbar{
   position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:24px;
-  padding:12px 22px;background:rgba(6,10,14,.82);backdrop-filter:blur(14px);
+  padding:12px 22px;background:var(--topbar-bg);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--line-soft);
 }
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
@@ -69,6 +113,10 @@ body{
 .brand-text strong{font-size:15px;letter-spacing:.3px}
 .brand-text small{color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nav{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.theme-toggle{
+  margin-left:14px;flex:none;align-self:center;padding:0;width:38px;height:38px;border-radius:10px;
+  display:grid;place-items:center;font-size:17px;line-height:1;
+}
 .nav-btn{
   position:relative;padding:9px 16px;border-radius:10px;text-decoration:none;
   color:var(--muted);font-weight:600;font-size:13.5px;letter-spacing:.2px;
@@ -97,7 +145,7 @@ body{
   opacity:1;visibility:visible;transform:translateY(0);
 }
 .nav-dropdown-inner{
-  min-width:180px;background:#0a1017;border:1px solid var(--line);border-radius:12px;padding:6px;
+  min-width:180px;background:var(--dropdown-bg);border:1px solid var(--line);border-radius:12px;padding:6px;
   box-shadow:0 14px 32px rgba(0,0,0,.5),0 0 20px rgba(43,255,139,.12);
 }
 .nav-dropdown-inner a{
@@ -119,7 +167,7 @@ body{
 .page-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
 .page-head h1{
   margin:0;font-size:26px;font-weight:800;letter-spacing:-.4px;
-  background:linear-gradient(92deg,#fff,var(--neon) 60%,var(--cyan));
+  background:linear-gradient(92deg,var(--text),var(--neon) 60%,var(--cyan));
   -webkit-background-clip:text;background-clip:text;color:transparent;
 }
 .page-head p{margin:4px 0 0;color:var(--muted);font-size:13.5px}
@@ -174,7 +222,7 @@ body{
 .btn[disabled]{opacity:.45;pointer-events:none}
 
 input,select,textarea{
-  font-family:var(--font);font-size:13.5px;color:var(--text);background:#070c11;
+  font-family:var(--font);font-size:13.5px;color:var(--text);background:var(--input-bg);
   border:1px solid var(--line);border-radius:9px;padding:9px 11px;width:100%;
   transition:border-color .2s,box-shadow .25s,background .2s;
 }
@@ -213,15 +261,15 @@ label.field span{letter-spacing:.3px}
 .tabs.sub .tab{font-size:12.5px;padding:5px 11px}
 
 /* ================= TABLES ================= */
-.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#070c10;max-height:72vh}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--table-wrap-bg);max-height:72vh}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
 th,td{padding:7px 10px;border-bottom:1px solid var(--line-soft);border-right:1px solid var(--line-soft);text-align:left;white-space:nowrap}
-th{background:#0a1218;color:var(--muted);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;z-index:3}
+th{background:var(--table-head-bg);color:var(--muted);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;z-index:3}
 tbody tr:hover td{background:rgba(43,255,139,.04)}
 td.num,th.num{text-align:center;font-family:var(--mono)}
-.sticky-col{position:sticky;left:0;background:#0a1218;z-index:2}
+.sticky-col{position:sticky;left:0;background:var(--table-head-bg);z-index:2}
 th.sticky-col{z-index:4}
-tbody tr:hover .sticky-col{background:#0d1a20}
+tbody tr:hover .sticky-col{background:var(--sticky-hover-bg)}
 .t-right{text-align:right}
 table.compact th,table.compact td{padding:5px 8px;font-size:12.5px}
 
@@ -244,7 +292,7 @@ table.compact th,table.compact td{padding:5px 8px;font-size:12.5px}
 .avg.none{color:var(--muted)}
 
 /* ================= PROGRESS ================= */
-.progress{height:8px;border-radius:99px;background:#0a1219;border:1px solid var(--line-soft);overflow:hidden}
+.progress{height:8px;border-radius:99px;background:var(--input-bg);border:1px solid var(--line-soft);overflow:hidden}
 .progress > i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--neon-dim),var(--neon));
   box-shadow:0 0 14px rgba(43,255,139,.6);transition:width .5s cubic-bezier(.2,.8,.2,1)}
 .progress.cyan > i{background:linear-gradient(90deg,#1a8fa8,var(--cyan));box-shadow:0 0 14px rgba(49,217,245,.55)}
@@ -269,7 +317,7 @@ hr.sep{border:none;border-top:1px solid var(--line-soft);margin:16px 0}
 /* ================= TOASTS / MODAL ================= */
 .toasts{position:fixed;right:18px;bottom:18px;z-index:200;display:flex;flex-direction:column;gap:10px}
 .toast{
-  padding:11px 15px;border-radius:11px;background:rgba(9,15,20,.96);border:1px solid rgba(43,255,139,.4);
+  padding:11px 15px;border-radius:11px;background:var(--toast-bg);border:1px solid rgba(43,255,139,.4);
   color:var(--text);font-size:13px;box-shadow:0 0 24px rgba(43,255,139,.22);max-width:380px;
   animation:toastIn .3s cubic-bezier(.2,.9,.3,1) both;backdrop-filter:blur(8px);
 }
@@ -321,7 +369,7 @@ table.vedomost td, table.vedomost th{white-space:nowrap}
 table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-align:center;letter-spacing:.5px}
 .mark-sel{
   width:auto;min-width:96px;padding:4px 8px;font-family:var(--mono);font-size:12.5px;
-  background:#070c11;border:1px solid var(--line-soft);border-radius:7px;color:var(--muted);
+  background:var(--input-bg);border:1px solid var(--line-soft);border-radius:7px;color:var(--muted);
 }
 .mark-sel:hover{border-color:rgba(43,255,139,.5);box-shadow:0 0 12px rgba(43,255,139,.22)}
 .mark-sel.edited{color:var(--neon);border-color:rgba(43,255,139,.5);background:rgba(43,255,139,.07)}
@@ -413,7 +461,7 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
   font-size:12.5px;min-width:230px;
 }
 .enroll-table td .cell-input:hover{border-color:var(--line)}
-.enroll-table td .cell-input:focus{background:#070c11}
+.enroll-table td .cell-input:focus{background:var(--input-bg)}
 .enroll-table td .cell-input.muted{color:var(--muted);min-width:150px}
 /* группа/строка, найденная поиском по ФИО ребёнка */
 .card.search-hit{border-color:rgba(43,255,139,.55);box-shadow:var(--shadow-neon)}
@@ -435,7 +483,7 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
 
 input.box{
   appearance:none;-webkit-appearance:none;width:19px;height:19px;margin:0;padding:0;cursor:pointer;
-  border:1px solid var(--line);border-radius:6px;background:#070c11;display:inline-grid;place-items:center;
+  border:1px solid var(--line);border-radius:6px;background:var(--input-bg);display:inline-grid;place-items:center;
   transition:border-color .18s,background .18s,box-shadow .22s;
 }
 input.box:hover{border-color:rgba(43,255,139,.6);box-shadow:0 0 10px rgba(43,255,139,.25)}

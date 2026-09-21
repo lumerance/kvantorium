@@ -3,6 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#04070a">
+<script>
+// Тема выставляется здесь, до подключения CSS и отрисовки — иначе при
+// светлой теме страница на долю секунды мелькала бы тёмной (FOUC).
+// По умолчанию — тёмная (как и было всегда), пока не выбрана светлая явно.
+(function () {
+  try {
+    if (localStorage.getItem('kvantorium28.theme') === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute('content', '#eef3f1');
+    }
+  } catch (e) {}
+})();
+</script>
 <title>Кванториум-28 · Инструмент педагога</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,7 +26,6 @@
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<meta name="theme-color" content="#04070a">
 </head>
 <body>
 <div class="bg-grid" aria-hidden="true"></div>
@@ -41,6 +55,7 @@
     <a class="nav-btn" href="#/salary"    data-route="salary">Зарплата</a>
     <a class="nav-btn" href="#/data"      data-route="data">Данные</a>
   </nav>
+  <button id="theme-toggle" class="btn sm ghost theme-toggle" type="button" aria-label="Переключить тему"></button>
 </header>
 
 <main id="view" class="view"></main>

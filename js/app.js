@@ -1,4 +1,5 @@
 import { route, startRouter } from './core/router.js';
+import { initThemeToggle } from './core/theme.js';
 import * as dashboard from './pages/dashboard.js';
 import * as journal from './pages/journal.js';
 import * as enroll from './pages/enroll.js';
@@ -15,6 +16,7 @@ route('salary', salary.render);
 route('data', data.render);
 route('vedomost', vedomost.render);
 
+initThemeToggle(document.getElementById('theme-toggle'));
 startRouter();
 
 // подсветка курсора неоновым следом на кнопках (лёгкий эффект)
