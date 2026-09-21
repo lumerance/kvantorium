@@ -82,6 +82,7 @@ export function render(root, params = {}) {
   const wrap = h('div', {});
   root.append(wrap);
   let brush = '✓';
+  let randomCfg = null;   // { fives, fours } — заданное в модалке «Случайные оценки»
 
   function setMark(shift, groupId, studentId, key, mark) {
     update(x => {
@@ -174,6 +175,11 @@ export function render(root, params = {}) {
           class: 'btn sm' + (brush === null ? ' primary' : ''),
           onClick: () => { brush = null; redraw(); }
         }, '↻ Цикл по клику'),
+        h('button', {
+          class: 'btn sm' + (brush === 'random' ? ' primary' : ''),
+          title: randomCfg ? `Случайные оценки: ${randomCfg.fives}×5, ${randomCfg.fours}×4 — клик настроить заново` : 'Случайные оценки',
+          onClick: () => openRandomModal(group),
+        }, '🎲'),
         h('div', { class: 'legend', style: { marginLeft: 'auto' } },
           h('span', { class: 'k' }, h('i', { class: 'sw', style: { background: 'rgba(43,255,139,.3)' } }), '✓ был'),
           h('span', { class: 'k' }, h('i', { class: 'sw', style: { background: 'rgba(125,149,163,.3)' } }), 'н — не был'),
@@ -210,7 +216,28 @@ export function render(root, params = {}) {
     // электронный журнал
     if (!isActual) wrap.append(ktpCard(st, group, shift, lessons, redraw));
 
-    wrap.append(journalTable(data, subject, group, shift, lessons, setMark, redraw, () => brush));
+    /** Случайные оценки на одно занятие: fives пятёрок и fours четвёрок —
+     *  случайным ученикам группы, остальным — случайно 3 или 2. */
+    function fillLessonRandom(l) {
+      if (!randomCfg) return;
+      const ids = group.students.map(s => s.id);
+      for (let i = ids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+      }
+      const n = ids.length;
+      const f5 = Math.min(randomCfg.fives, n);
+      const f4 = Math.min(randomCfg.fours, n - f5);
+      const k = lessonKey(l);
+      let idx = 0;
+      for (; idx < f5; idx++) setMark(shift, group.id, ids[idx], k, '5');
+      for (; idx < f5 + f4; idx++) setMark(shift, group.id, ids[idx], k, '4');
+      for (; idx < n; idx++) setMark(shift, group.id, ids[idx], k, Math.random() < 0.65 ? '3' : '2');
+      toast(`Случайные оценки выставлены на ${dateRu(l.date)}: ${f5}×5, ${f4}×4`);
+      redraw();
+    }
+
+    wrap.append(journalTable(data, subject, group, shift, lessons, setMark, redraw, () => brush, fillLessonRandom));
   }
 
   /** Открывает ведомость, предварительно выбрав группы текущего предмета. */
@@ -236,6 +263,42 @@ export function render(root, params = {}) {
     });
     toast(`Отмечено присутствие: ${group.students.length} чел. × ${lessons.length} занятий`);
     redraw();
+  }
+
+  /**
+   * Модалка «Случайные оценки»: сколько пятёрок и четвёрок раздать. После
+   * подтверждения включается кисть «random» — дальше клик по шапке занятия
+   * в таблице (не по отдельной клетке) раздаёт оценки на весь столбец сразу.
+   */
+  function openRandomModal(group) {
+    const n = group.students.length;
+    if (!n) return toast('В группе нет учеников', 'err');
+    const defFives = Math.max(0, Math.min(n, randomCfg?.fives ?? Math.round(n * 0.25)));
+    const defFours = Math.max(0, Math.min(n - defFives, randomCfg?.fours ?? Math.round(n * 0.35)));
+    const fivesInput = h('input', { type: 'number', inputmode: 'numeric', min: '0', max: String(n), value: String(defFives) });
+    const foursInput = h('input', { type: 'number', inputmode: 'numeric', min: '0', max: String(n), value: String(defFours) });
+    modal({
+      title: '🎲 Случайные оценки',
+      body: h('div', {},
+        h('p', { class: 'muted', style: { marginTop: 0 } },
+          `В группе «${group.name}» — ${n} чел. Укажите, сколько пятёрок и четвёрок раздать — кому именно из группы, решит случайный выбор. Остальным ученикам достанутся случайные 3 и 2. После подтверждения кликните по шапке занятия (дате) в таблице — оценки появятся сразу на весь столбец; так можно раздать оценки на несколько занятий подряд, не открывая модалку заново.`),
+        h('div', { class: 'row' },
+          h('label', { class: 'field' }, h('span', {}, 'Пятёрок'), fivesInput),
+          h('label', { class: 'field' }, h('span', {}, 'Четвёрок'), foursInput))),
+      okText: 'Готово',
+      onOk: () => {
+        const fives = Math.max(0, parseInt(fivesInput.value, 10) || 0);
+        const fours = Math.max(0, parseInt(foursInput.value, 10) || 0);
+        if (fives + fours > n) {
+          toast(`В группе только ${n} чел. — пятёрок и четвёрок вместе не может быть больше`, 'err');
+          return false;
+        }
+        randomCfg = { fives, fours };
+        brush = 'random';
+        toast('Кликните по шапке занятия (дате), чтобы раздать оценки на весь столбец');
+        redraw();
+      },
+    });
   }
 
   /**
@@ -327,18 +390,24 @@ export function render(root, params = {}) {
   redraw();
 }
 
-function journalTable(data, subject, group, shift, lessons, setMark, redraw, getBrush) {
+function journalTable(data, subject, group, shift, lessons, setMark, redraw, getBrush, fillLessonRandom) {
   const jGroup = data.journal?.[shift]?.[group.id] || {};
+  const isRandomMode = getBrush() === 'random';
+  const colHeaderProps = (l) => ({
+    class: 'num' + (isRandomMode ? ' col-random' : ''),
+    title: isRandomMode ? 'Клик — раздать случайные оценки на это занятие' : `${l.code} · ${l.time} · ${l.weekday}`,
+    onClick: isRandomMode ? () => fillLessonRandom(l) : undefined,
+  });
 
   const thead = h('thead', {},
     h('tr', {},
       h('th', { class: 'sticky-col', rowspan: 2, style: { minWidth: '220px' } }, 'Фамилия Имя'),
-      ...lessons.map(l => h('th', { class: 'num', title: `${l.code} · ${l.time} · ${l.weekday}` },
-        dateRu(l.date))),
+      ...lessons.map(l => h('th', colHeaderProps(l), dateRu(l.date))),
       h('th', { class: 'num', rowspan: 2, title: 'Средний балл за заезд' }, `Ср. балл${shift === 3 ? ' (3 заезд)' : ''}`),
       shift === 3 ? h('th', { class: 'num', rowspan: 2, title: 'Средний балл за все три заезда' }, 'Ср. за 3 заезда') : null,
     ),
-    h('tr', {}, ...lessons.map(l => h('th', { class: 'num', style: { fontSize: '10.5px', fontWeight: '400' } },
+    h('tr', {}, ...lessons.map(l => h('th',
+      { ...colHeaderProps(l), style: { fontSize: '10.5px', fontWeight: '400' } },
       `${WEEKDAY_SHORT[l.weekday] || ''} ${l.no}ур`))),
   );
 
@@ -375,6 +444,7 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
         };
         btn.addEventListener('click', () => {
           const brush = getBrush();
+          if (brush === 'random') { toast('В режиме случайных оценок кликните по шапке занятия (дате)', 'err'); return; }
           const cur = data.journal?.[shift]?.[group.id]?.[s.id]?.[k] || '';
           if (brush === null) apply(CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length]);
           else apply(cur === brush ? '' : brush);
@@ -404,7 +474,9 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
   return h('div', {},
     h('div', { class: 'table-wrap' }, h('table', {}, thead, tbody, footer)),
     h('p', { class: 'muted', style: { fontSize: '12px', marginTop: '8px' } },
-      'Клик по клетке ставит выбранную кисть (повторный клик той же отметкой — снимает), правая кнопка мыши — очистить. Средний балл считается только по оценкам 2–5.'));
+      isRandomMode
+        ? '🎲 Режим случайных оценок: клик по шапке занятия (дате) раздаёт оценки всему столбцу. Отдельные клетки в этом режиме не редактируются — выберите другую кисть, чтобы вернуться к обычной простановке.'
+        : 'Клик по клетке ставит выбранную кисть (повторный клик той же отметкой — снимает), правая кнопка мыши — очистить. Средний балл считается только по оценкам 2–5.'));
 }
 
 function exportJournal(data, subject, group, shift, lessons) {
