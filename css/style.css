@@ -260,6 +260,17 @@ label.field span{letter-spacing:.3px}
 .tab .badge{font-family:var(--mono);font-size:11px;opacity:.75;margin-left:5px}
 .tabs.sub .tab{font-size:12.5px;padding:5px 11px}
 
+/* три уровня вкладок в журнале (заезд → предмет → группа) — раньше три
+   отдельные панели одна под другой, теперь один блок с более узкими
+   строками внутри: меньше отступов, компактнее по высоте */
+.tab-tiers{
+  padding:6px;background:rgba(255,255,255,.02);
+  border:1px solid var(--line-soft);border-radius:12px;margin-bottom:16px;
+}
+.tabs-row{display:flex;gap:6px;flex-wrap:wrap;padding:3px 2px}
+.tabs-row.sub .tab{font-size:12.5px;padding:4px 10px}
+.tabs-row + .tabs-row{border-top:1px dashed var(--line-soft);margin-top:2px;padding-top:8px}
+
 /* ================= TABLES ================= */
 .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--table-wrap-bg);max-height:72vh}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}

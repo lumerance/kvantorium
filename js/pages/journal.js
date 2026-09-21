@@ -139,26 +139,23 @@ export function render(root, params = {}) {
         }, subject.isEnroll ? (isActual ? '⚙ Классы' : '⚙ Набор') : '⚙ Данные'),
       )));
 
-    /* --- вкладки заездов --- */
-    wrap.append(h('div', { class: 'tabs' }, ...SHIFTS.map(s => {
-      const sc = data.schedules[String(s)];
-      return h('button', {
-        class: 'tab' + (s === shift ? ' active' : ''),
-        onClick: () => { update(x => { x.ui[uiShiftKey] = s; }); redraw(); }
-      }, `${s} заезд`, h('span', { class: 'badge' }, sc ? `${sc.lessons.length}` : '—'));
-    })));
-
-    /* --- вкладки предметов --- */
-    wrap.append(h('div', { class: 'tabs sub' }, ...subjects.map(s => h('button', {
-      class: 'tab' + (s.id === subject.id ? ' active' : ''),
-      onClick: () => { update(x => { x.ui[uiSubjectKey] = s.id; x.ui[uiGroupKey] = s.groups[0]?.id; }); redraw(); }
-    }, s.title))));
-
-    /* --- вкладки групп --- */
-    wrap.append(h('div', { class: 'tabs sub' }, ...subject.groups.map(g => h('button', {
-      class: 'tab' + (g.id === group.id ? ' active' : ''),
-      onClick: () => { update(x => { x.ui[uiGroupKey] = g.id; }); redraw(); }
-    }, g.name, h('span', { class: 'badge' }, g.students.length)))));
+    /* --- вкладки заездов / предметов / групп — один компактный блок --- */
+    wrap.append(h('div', { class: 'tab-tiers' },
+      h('div', { class: 'tabs-row' }, ...SHIFTS.map(s => {
+        const sc = data.schedules[String(s)];
+        return h('button', {
+          class: 'tab' + (s === shift ? ' active' : ''),
+          onClick: () => { update(x => { x.ui[uiShiftKey] = s; }); redraw(); }
+        }, `${s} заезд`, h('span', { class: 'badge' }, sc ? `${sc.lessons.length}` : '—'));
+      })),
+      h('div', { class: 'tabs-row sub' }, ...subjects.map(s => h('button', {
+        class: 'tab' + (s.id === subject.id ? ' active' : ''),
+        onClick: () => { update(x => { x.ui[uiSubjectKey] = s.id; x.ui[uiGroupKey] = s.groups[0]?.id; }); redraw(); }
+      }, s.title))),
+      h('div', { class: 'tabs-row sub' }, ...subject.groups.map(g => h('button', {
+        class: 'tab' + (g.id === group.id ? ' active' : ''),
+        onClick: () => { update(x => { x.ui[uiGroupKey] = g.id; }); redraw(); }
+      }, g.name, h('span', { class: 'badge' }, g.students.length))))));
 
     /* --- панель отметок --- */
     wrap.append(h('div', { class: 'card', style: { marginBottom: '14px', padding: '12px 16px' } },
