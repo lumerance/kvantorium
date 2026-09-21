@@ -8,7 +8,7 @@
 //    договора и Навигатора — это не набор, а реальный состав класса.
 // Хранится раздельно (st.enroll / st.actual.enroll), но одной и той же
 // логикой — как и всё остальное деление на kind в этом приложении.
-import { h, toast, download, confirmBox, modal, emptyState, progressBar, printElement } from '../core/ui.js';
+import { h, toast, download, confirmBox, modal, emptyState, progressBar, printElement, captureFocus, restoreFocus } from '../core/ui.js';
 import { getState, update } from '../core/store.js';
 import { parseCode } from '../parsers/schedule.js';
 import { SHIFTS, ENROLL_SUBJECT_ID } from './journal.js';
@@ -77,6 +77,21 @@ function knownFio(st, kind) {
   return [...out].sort();
 }
 
+/** Поиск ребёнка по (части) ФИО среди групп/классов текущего вида — для
+ *  подсветки и автораскрытия его группы. Пусто, если поле поиска пустое. */
+function searchMatches(kind, query) {
+  const q = norm(query).toLowerCase();
+  const groupIds = new Set(), studentIds = new Set();
+  if (q) {
+    for (const g of groupsOf(getState(), kind)) {
+      for (const s of g.students) {
+        if (s.fio.toLowerCase().includes(q)) { groupIds.add(g.id); studentIds.add(s.id); }
+      }
+    }
+  }
+  return { active: !!q, groupIds, studentIds };
+}
+
 /** Создаёт группу/класс, возвращает её id или null при ошибке (имя пустое/занято). */
 function addGroup(name, program = '', code = null, kind = 'official') {
   const clean = norm(name);
@@ -115,10 +130,12 @@ export function render(root, params = {}) {
   let totalsBox = null;
   const cards = new Map();      // groupId -> элемент карточки
   const expanded = new Set();   // groupId раскрытых панелей — по умолчанию все свёрнуты
+  let searchQuery = '';         // поиск ребёнка по ФИО — подсвечивает и раскрывает его группу
 
   redraw();
 
   function redraw() {
+    const focusToken = captureFocus(wrap);
     const st = getState();
     const isDO = kind === 'official';
     wrap.innerHTML = '';
@@ -139,6 +156,8 @@ export function render(root, params = {}) {
       h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, '📋 Официальный (ДО)'),
       h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, '📝 Фактический (классы)')));
 
+    if (groupsOf(st, kind).length) wrap.append(searchCard(kind, searchQuery, (v) => { searchQuery = v; redrawAndReveal(); }));
+
     totalsBox = totalsCard(st, kind, isDO);
     wrap.append(totalsBox);
     wrap.append(addCard(st, redraw, kind, isDO, onGroupCreated));
@@ -154,15 +173,26 @@ export function render(root, params = {}) {
     const list = h('div', {});
     for (const g of groupsOf(st, kind)) list.append(mountCard(g));
     wrap.append(list);
+    restoreFocus(wrap, focusToken);
+  }
+
+  /** После смены запроса — раскрыть найденную группу и прокрутить к ней. */
+  function redrawAndReveal() {
+    redraw();
+    requestAnimationFrame(() => wrap.querySelector('.search-hit')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
   }
 
   /** Карточка группы + её замена на месте, без перерисовки всей страницы. */
   function mountCard(g, focusAdd = false) {
     const isDO = kind === 'official';
     if (focusAdd) expanded.add(g.id);
-    const isOpen = expanded.has(g.id);
+    const { groupIds: hitGroups, studentIds: hitStudents } = searchMatches(kind, searchQuery);
+    const isOpen = expanded.has(g.id) || hitGroups.has(g.id);
     const toggle = () => { isOpen ? expanded.delete(g.id) : expanded.add(g.id); remount(g.id); };
-    const card = groupCard(g, { refresh: () => remount(g.id, true), reload: redraw, refreshTotals, kind, isDO, isOpen, toggle });
+    const card = groupCard(g, {
+      refresh: () => remount(g.id, true), reload: redraw, refreshTotals, kind, isDO, isOpen, toggle,
+      isSearchHit: hitGroups.has(g.id), hitStudents,
+    });
     cards.set(g.id, card);
     if (focusAdd) requestAnimationFrame(() => card.querySelector('.add-fio')?.focus());
     return card;
@@ -217,6 +247,24 @@ function totalsCard(st, kind, isDO) {
     cell('Договоры', `${contract} из ${all}`, all ? `осталось собрать ${all - contract}` : '—', progressBar(contract, all)),
     cell('Навигатор', `${navigator} из ${all}`, all ? `осталось отправить ${all - navigator}` : '—', progressBar(navigator, all)),
   );
+}
+
+/* ---------------- поиск ребёнка по ФИО ---------------- */
+function searchCard(kind, query, onChange) {
+  const { active, groupIds, studentIds } = searchMatches(kind, query);
+  const input = h('input', {
+    type: 'search', class: 'mono', placeholder: 'Фамилия ученика…', value: query,
+    onInput: (e) => onChange(e.target.value),
+  });
+  const hint = active
+    ? h('span', { class: 'pill' + (studentIds.size ? ' ok' : ' warn') },
+        studentIds.size ? `найдено: ${studentIds.size} · групп: ${groupIds.size}` : 'совпадений нет')
+    : null;
+  return h('div', { class: 'card', style: { marginBottom: '16px' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
+      h('label', { class: 'field', style: { flex: '1 1 240px' } }, h('span', {}, '🔍 Поиск ребёнка по фамилии'), input),
+      hint,
+      query ? h('button', { class: 'btn sm ghost', onClick: () => onChange('') }, '✕ Сбросить') : null));
 }
 
 /* ---------------- создание групп ---------------- */
@@ -302,7 +350,7 @@ function codeRow(g, st, refresh, kind) {
 }
 
 /* ---------------- карточка группы: свёрнута по умолчанию, раскрывается по клику ---------------- */
-function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, toggle }) {
+function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, toggle, isSearchHit, hitStudents }) {
   const st = getState();
   const c = counts(g);
 
@@ -335,7 +383,7 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
     recount();
   };
 
-  const rows = g.students.map((s, i) => h('tr', {},
+  const rows = g.students.map((s, i) => h('tr', { class: hitStudents?.has(s.id) ? 'row-hit' : '' },
     h('td', { class: 'num muted' }, i + 1),
     h('td', {}, h('input', {
       type: 'text', value: s.fio, class: 'cell-input',
@@ -437,7 +485,7 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
       : h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } }, 'Enter в поле ввода добавляет следующего ребёнка.'),
   ) : null;
 
-  return h('div', { class: 'card', style: { marginBottom: '16px' } }, head, body);
+  return h('div', { class: 'card' + (isSearchHit ? ' search-hit' : ''), style: { marginBottom: '16px' } }, head, body);
 }
 
 function renameDialog(g, reload, kind, isDO) {

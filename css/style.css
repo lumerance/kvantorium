@@ -415,6 +415,10 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
 .enroll-table td .cell-input:hover{border-color:var(--line)}
 .enroll-table td .cell-input:focus{background:#070c11}
 .enroll-table td .cell-input.muted{color:var(--muted);min-width:150px}
+/* группа/строка, найденная поиском по ФИО ребёнка */
+.card.search-hit{border-color:rgba(43,255,139,.55);box-shadow:var(--shadow-neon)}
+.enroll-table tr.row-hit{background:rgba(43,255,139,.08)}
+.enroll-table tr.row-hit td:nth-child(2) .cell-input{color:var(--neon);font-weight:700}
 /* ===== КТП: темы занятий по дням ===== */
 .ktp-day{
   border:1px solid var(--line-soft);border-radius:12px;padding:11px 13px;margin-bottom:10px;
