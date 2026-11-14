@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#04070a">
+<meta name="theme-color" content="#030806">
 <script>
 // Тема выставляется здесь, до подключения CSS и отрисовки — иначе при
 // светлой теме страница на долю секунды мелькала бы тёмной (FOUC).
@@ -13,7 +13,7 @@
     if (localStorage.getItem('kvantorium28.theme') === 'light') {
       document.documentElement.setAttribute('data-theme', 'light');
       var m = document.querySelector('meta[name="theme-color"]');
-      if (m) m.setAttribute('content', '#eef3f1');
+      if (m) m.setAttribute('content', '#e4ede8');
     }
   } catch (e) {}
 })();
@@ -28,37 +28,16 @@
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 </head>
 <body>
-<div class="bg-grid" aria-hidden="true"></div>
 <div class="bg-glow" aria-hidden="true"></div>
 
-<header class="topbar">
-  <div class="brand">
-    <img class="brand-logo" src="assets/logo.svg" alt="Кванториум-28" width="46" height="46">
-    <div class="brand-text">
-      <strong>Кванториум-28</strong>
-      <small>универсальный инструмент педагога</small>
-    </div>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="nav-backdrop" id="nav-backdrop" aria-hidden="true"></div>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main id="view" class="view"></main>
   </div>
-  <nav class="nav" id="nav">
-    <a class="nav-btn" href="#/dashboard" data-route="dashboard">Обзор</a>
-    <div class="nav-item">
-      <a class="nav-btn" href="#/journal" data-route="journal">Журнал</a>
-      <div class="nav-dropdown">
-        <div class="nav-dropdown-inner">
-          <a href="#/journal?kind=actual">📝 Фактический</a>
-          <a href="#/journal">📋 Официальный</a>
-        </div>
-      </div>
-    </div>
-    <a class="nav-btn" href="#/enroll"    data-route="enroll">Набор</a>
-    <a class="nav-btn" href="#/hours"     data-route="hours">Часы</a>
-    <a class="nav-btn" href="#/salary"    data-route="salary">Зарплата</a>
-    <a class="nav-btn" href="#/data"      data-route="data">Данные</a>
-  </nav>
-  <button id="theme-toggle" class="btn sm ghost theme-toggle" type="button" aria-label="Переключить тему"></button>
-</header>
-
-<main id="view" class="view"></main>
+</div>
 
 <div id="toasts" class="toasts"></div>
 <div id="modal-root"></div>

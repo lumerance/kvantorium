@@ -3,18 +3,20 @@
 // независимых набора списка/расписания/сопоставления одной и той же формы;
 // переключаются вкладкой вверху страницы, вся логика ниже общая — просто
 // читает/пишет либо st.* (официальный), либо st.actual.* (фактический).
-import { h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile, aggBadge } from '../core/ui.js';
+import { h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile, aggBadge, moreMenu } from '../core/ui.js';
+import { icon } from '../core/icons.js';
 import {
-  getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule, autoMapAll,
+  getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule, autoMapAll, codeBinding, bindCode,
   viewedAgg, activeAgg, isViewingArchive, allAgglomerations, createAgglomeration, renameAgglomeration, switchViewedAgglomeration, setActiveAgglomeration,
 } from '../core/store.js';
 import { importStudentsFile, importStudentsCsvFile, studentsToCsv } from '../parsers/students.js';
-import { importScheduleFile, parseCode } from '../parsers/schedule.js';
+import { importScheduleFile, parseCode, isDoCode } from '../parsers/schedule.js';
 import { importPlanFile } from '../parsers/plan.js';
 import { SHIFTS } from './journal.js';
 import { programsCard } from './ktp-panel.js';
 import { actualScheduleCard } from './actual-schedule-panel.js';
 import { go } from '../core/router.js';
+import { openFinishDialog, confirmReopen } from './agglomeration-finish.js';
 
 const dataOf = (st, kind) => (kind === 'actual' ? st.actual : st);
 const uiKeys = (kind) => (kind === 'actual'
@@ -34,18 +36,24 @@ export function render(root, params = {}) {
     wrap.append(h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Данные', aggBadge(agg, readOnly)), h('p', {}, 'Импорт документов, сопоставление групп и резервные копии. Всё хранится локально в браузере.')),
       h('div', { class: 'head-actions' },
-        h('button', { class: 'btn', onClick: () => download(`Кванториум28_бэкап_${new Date().toISOString().slice(0, 10)}.json`, exportBackup(), 'application/json') }, '⤓ Выгрузить всё'),
-        h('button', { class: 'btn', onClick: () => pickFile('.json', async f => {
-          try { importBackup(await f.text()); toast('Резервная копия загружена'); redraw(); }
-          catch (e) { toast('Ошибка: ' + e.message, 'err'); }
-        }) }, '⤒ Загрузить копию'),
-        h('button', { class: 'btn danger', onClick: () => confirmBox('Удалить ВСЕ данные приложения — включая все агломерации (списки, расписания, журналы), часы и настройки зарплаты?', () => { resetAll(); toast('Данные очищены'); redraw(); }) }, '🗑 Очистить'),
+        moreMenu([
+          { title: 'Резервная копия всех данных' },
+          { label: 'Скачать копию (.json)', icon: icon('data', 16), onClick: () => download(`Кванториум28_бэкап_${new Date().toISOString().slice(0, 10)}.json`, exportBackup(), 'application/json') },
+          { label: 'Восстановить из копии…', icon: icon('layers', 16), onClick: () => pickFile('.json', async f => {
+            try { importBackup(await f.text()); toast('Резервная копия загружена'); redraw(); }
+            catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+          }) },
+          'sep',
+          { label: 'Удалить все данные…', danger: true, onClick: () => confirmBox('Удалить ВСЕ данные приложения — включая все агломерации (списки, расписания, журналы), часы и настройки зарплаты?', () => { resetAll(); toast('Данные очищены'); redraw(); }) },
+        ], { label: 'Резервная копия' }),
       )));
 
     wrap.append(agglomerationSwitcher(st, redraw));
     if (readOnly) {
       wrap.append(h('div', { class: 'card', style: { marginBottom: '16px', padding: '12px 16px' } },
-        h('span', { class: 'muted' }, '🗄 Просмотр архивной агломерации — импорт и правки здесь недоступны. Новые данные по-прежнему пишутся в активную агломерацию.')));
+        h('span', { class: 'muted' }, agg.completedAt
+          ? '🔒 Агломерация завершена — импорт и правки недоступны. Для новой работы создайте новую агломерацию.'
+          : '🗄 Просмотр архивной агломерации — импорт и правки здесь недоступны. Новые данные по-прежнему пишутся в активную агломерацию.')));
     }
 
     wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
@@ -90,6 +98,7 @@ function agglomerationSwitcher(st, redraw) {
       h('span', {}, agg.name),
       h('span', { class: 'muted mono', style: { fontSize: '11px' } }, `${n} чел.`),
       isActive ? h('span', { class: 'pill ok', style: { fontSize: '10.5px' } }, 'активна') : null,
+      agg.completedAt ? h('span', { class: 'pill', style: { fontSize: '10.5px' }, title: `Завершена ${new Date(agg.completedAt).toLocaleDateString('ru-RU')}` }, '🔒 завершена') : null,
       h('button', {
         class: 'btn sm ghost', title: 'Переименовать', style: { padding: '2px 6px' },
         onClick: (e) => { e.stopPropagation(); renameModal(agg, redraw); },
@@ -111,7 +120,20 @@ function agglomerationSwitcher(st, redraw) {
         h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
           'Каждая — свой набор детей на блок из трёх заездов. Прошлые остаются доступны для просмотра, писать можно только в активную.')),
       h('button', { class: 'btn sm primary', onClick: () => newAgglomerationModal(redraw) }, '+ Новая агломерация')),
-    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' } }, ...list.map(pill)));
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' } }, ...list.map(pill)),
+    finishRow(viewed, redraw));
+}
+
+/** Завершение просматриваемой агломерации (или повторное открытие завершённой). */
+function finishRow(agg, redraw) {
+  const c = agg.completion;
+  return h('div', { class: 'finish-row' },
+    agg.completedAt
+      ? h('p', { class: 'muted' }, `«${agg.name}» завершена ${new Date(agg.completedAt).toLocaleDateString('ru-RU')}: списано учебных ${c?.teaching ?? 0} ч и прочих ${c?.method ?? 0} ч. Данные открыты только для просмотра.`)
+      : h('p', { class: 'muted' }, `Когда все три заезда «${agg.name}» пройдены — завершите агломерацию: она закроется для правки, а проведённые уроки и методические часы спишутся в «Часы по плану».`),
+    agg.completedAt
+      ? h('button', { class: 'btn sm', onClick: () => confirmReopen(agg, redraw) }, '🔓 Открыть для правки')
+      : h('button', { class: 'btn sm', onClick: () => openFinishDialog(agg, redraw) }, icon('lock', 15), 'Завершить агломерацию'));
 }
 
 function newAgglomerationModal(redraw) {
@@ -508,7 +530,7 @@ function scheduleCard(agg, redraw, kind, readOnly) {
         h('span', { class: 'v', style: { fontSize: '12px' } }, sc.dates.length ? `${dateRu(sc.dates[0])} – ${dateRu(sc.dates.at(-1))}` : '—')));
       body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Педагоги'), h('span', { class: 'v', style: { fontSize: '11.5px' } }, sc.teachers.join(', ') || '—')));
       body.append(h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '10px 0' } },
-        ...sc.codes.map(c => h('span', { class: 'pill' + (data.mapping[c] ? ' ok' : ' warn') }, c))));
+        ...sc.codes.map(c => h('span', { class: 'pill' + (codeBinding(data, c) ? ' ok' : ' warn') }, c))));
       body.append(h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
         readOnly ? null : h('button', { class: 'btn sm', onClick: () => scheduleDialog(shift, redraw, false, kind) }, '☑ Оставить только свои'),
         h('button', { class: 'btn sm', onClick: () => showLessons(sc, shift) }, 'Показать занятия'),
@@ -587,26 +609,32 @@ function mappingCard(agg, redraw, kind, readOnly) {
       emptyState('🔗', 'Загрузите расписание — коды групп появятся здесь для сопоставления со списком детей.'));
   }
 
+  const enrollGroups = data.enroll?.groups || [];
+  const enrollLabel = kind === 'actual' ? 'Классы фактического журнала' : 'Набор (дополнительное образование)';
+
   const rows = list.map(code => {
     const p = parseCode(code);
-    const cur = data.mapping[code];
+    const cur = codeBinding(data, code);
+    // value: «g|предмет|группа» — сетевая группа, «e|группа» — группа «Набора»
     const sel = h('select', {
       disabled: readOnly,
       onChange: readOnly ? undefined : (e) => {
-        const v = e.target.value;
-        update(x => {
-          const root = dataOf(activeAgg(x), kind);
-          if (!v) delete root.mapping[code];
-          else { const [subjectId, groupId] = v.split('|'); root.mapping[code] = { subjectId, groupId }; }
-        });
+        const [t, a, b] = e.target.value.split('|');
+        bindCode(code, t === 'g' ? { type: 'group', subjectId: a, groupId: b } : t === 'e' ? { type: 'enroll', groupId: a } : null, kind);
         redraw();
       }
     },
       h('option', { value: '' }, '— не сопоставлено —'),
-      ...groups.map(({ subject, group }) => h('option', {
-        value: `${subject.id}|${group.id}`,
-        selected: cur?.groupId === group.id,
-      }, `${subject.title} · ${group.name} (${group.students.length})`)));
+      groups.length ? h('optgroup', { label: 'Сетевые группы (списки школ)' },
+        ...groups.map(({ subject, group }) => h('option', {
+          value: `g|${subject.id}|${group.id}`,
+          selected: cur?.type === 'group' && cur.groupId === group.id,
+        }, `${subject.title} · ${group.name} (${group.students.length})`))) : null,
+      enrollGroups.length ? h('optgroup', { label: enrollLabel },
+        ...enrollGroups.map(g => h('option', {
+          value: `e|${g.id}`,
+          selected: cur?.type === 'enroll' && cur.groupId === g.id,
+        }, `${g.name}${g.program ? ' · ' + g.program.slice(0, 40) : ''} (${g.students.length})`))) : null);
 
     const usedIn = SHIFTS.filter(sh => (data.schedules[String(sh)]?.codes || []).includes(code));
     return h('tr', {},
@@ -615,13 +643,15 @@ function mappingCard(agg, redraw, kind, readOnly) {
         p ? `${p.prefix} · группа ${p.group}${p.grade ? ` · ${p.grade} класс` : ''}` : ''),
       h('td', {}, ...usedIn.map(s => h('span', { class: 'pill', style: { marginRight: '4px' } }, `${s} заезд`))),
       h('td', { style: { minWidth: '340px' } }, sel),
-      h('td', {}, cur ? h('span', { class: 'pill ok' }, '✓') : h('span', { class: 'pill warn' }, '!')),
+      h('td', {}, kind !== 'actual' && cur?.type === 'group' && isDoCode(code)
+        ? h('span', { class: 'pill warn', title: 'Код дополнительного образования привязан к сетевой группе — выберите группу из «Набора»' }, '⚠ ДО?')
+        : cur ? h('span', { class: 'pill ok' }, cur.type === 'enroll' ? 'ДО' : '✓') : h('span', { class: 'pill warn' }, '!')),
     );
   });
 
   return h('div', { class: 'card' },
     h('h3', {}, '3. Сопоставление кодов расписания с группами'),
-    h('div', { class: 'card-sub' }, 'Коды вида «Т1 РШ7» связываются с группами из списка автоматически: буква — направление, цифра — номер группы, последняя цифра — класс. Проверьте и поправьте, где нужно.'),
+    h('div', { class: 'card-sub' }, 'Коды вида «Т1 РШ7» связываются с группами из списка автоматически: буква — направление, цифра — номер группы, последняя цифра — класс. Коды дополнительного образования (не на Т и И) с сетевыми группами не сопоставляются — их выбирайте из групп «Набора»; одноимённая группа «Набора» подставляется сама.'),
     readOnly ? null : h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
       h('button', { class: 'btn sm', onClick: () => { const n = autoMapAll(kind); toast(n ? `Сопоставлено автоматически: ${n}` : 'Новых совпадений не найдено'); redraw(); } }, '⚡ Сопоставить автоматически'),
       h('button', { class: 'btn sm danger ghost', onClick: () => { update(x => { dataOf(activeAgg(x), kind).mapping = {}; }); redraw(); } }, 'Сбросить сопоставление')),

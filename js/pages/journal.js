@@ -9,7 +9,8 @@
 // балл за заезд для совпавших учеников как ручную правку в st.vedomostMarks
 // (её же понимает «Итоговая ведомость» — см. js/pages/vedomost.js), не трогая
 // сами отметки официального журнала.
-import { h, toast, dateRu, download, emptyState, WEEKDAY_SHORT, modal, aggBadge } from '../core/ui.js';
+import { h, toast, dateRu, download, emptyState, WEEKDAY_SHORT, modal, aggBadge, moreMenu } from '../core/ui.js';
+import { icon } from '../core/icons.js';
 import { getState, update, lessonsForGroup, lessonsForCode, lessonKey, activeAgg, viewedAgg, isViewingArchive } from '../core/store.js';
 import { ktpCard } from './ktp-panel.js';
 import { go } from '../core/router.js';
@@ -152,14 +153,17 @@ export function render(root, params = {}) {
         (!readOnly && lastAction && lastAction.shift === shift && lastAction.groupId === group.id)
           ? h('button', { class: 'btn danger ghost', title: `Отменить: ${lastAction.label}`, onClick: () => lastAction.undo() }, `↩ Отменить (${lastAction.label})`)
           : null,
-        readOnly ? null : h('button', { class: 'btn', onClick: () => markAllPresent(shift, group, lessons) }, '✓ Все присутствуют'),
-        h('button', { class: 'btn', onClick: () => exportJournal(data, subject, group, shift, lessons) }, '⤓ Экспорт CSV'),
-        (!readOnly && canTransfer) ? h('button', { class: 'btn', onClick: () => openTransferDialog(redraw) }, '🔁 Перенести из Фактического') : null,
-        (subject.isEnroll || isActual) ? null : h('button', { class: 'btn primary', onClick: () => openVedomost(subject) }, '📄 Создание ведомости'),
-        h('button', {
-          class: 'btn',
-          onClick: () => go(subject.isEnroll ? 'enroll' : 'data', isActual ? { kind: 'actual' } : undefined),
-        }, subject.isEnroll ? (isActual ? '⚙ Классы' : '⚙ Набор') : '⚙ Данные'),
+        readOnly ? null : h('button', { class: 'btn primary', onClick: () => markAllPresent(shift, group, lessons) }, '✓ Все присутствуют'),
+        moreMenu([
+          { title: 'Выгрузка' },
+          { label: 'Экспорт журнала группы (CSV)', icon: icon('sheet', 16), onClick: () => exportJournal(data, subject, group, shift, lessons) },
+          (subject.isEnroll || isActual) ? null : { label: 'Итоговая ведомость по предмету', icon: icon('documents', 16), onClick: () => openVedomost(subject) },
+          (!readOnly && canTransfer) ? 'sep' : null,
+          (!readOnly && canTransfer) ? { label: 'Перенести оценки из Фактического', icon: icon('journalActual', 16), onClick: () => openTransferDialog(redraw) } : null,
+          'sep',
+          { label: subject.isEnroll ? (isActual ? 'Настроить классы' : 'Настроить группы «Набора»') : 'Списки и расписание (Данные)', icon: icon(subject.isEnroll ? 'enroll' : 'data', 16),
+            onClick: () => go(subject.isEnroll ? 'enroll' : 'data', isActual ? { kind: 'actual' } : undefined) },
+        ]),
       )));
 
     /* --- вкладки заездов / предметов / групп — один компактный блок --- */

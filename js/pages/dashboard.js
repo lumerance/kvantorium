@@ -42,12 +42,7 @@ export function render(root) {
         [Object.keys(agg.mapping).length > 0, 'Группы сопоставлены с расписанием', `${Object.keys(agg.mapping).length} кодов связано`],
         [!!st.plan, 'Индивидуальный план импортирован', st.plan ? `${Math.round(st.plan.totals.all)} ч по плану` : 'нужен xlsx с планом'],
         [marksCount > 0, 'Отметки в журнале', `${marksCount} отметок`],
-      ]),
-      h('div', { style: { display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' } },
-        h('button', { class: 'btn sm', onClick: () => go('data') }, 'Данные'),
-        h('button', { class: 'btn sm', onClick: () => go('journal') }, 'Журнал'),
-        h('button', { class: 'btn sm', onClick: () => go('hours') }, 'Часы'),
-        h('button', { class: 'btn sm', onClick: () => go('salary') }, 'Зарплата'))),
+      ])),
     upcomingCard(agg),
   ));
 

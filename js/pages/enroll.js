@@ -8,9 +8,10 @@
 //    договора и Навигатора — это не набор, а реальный состав класса.
 // Хранится раздельно (st.enroll / st.actual.enroll), но одной и той же
 // логикой — как и всё остальное деление на kind в этом приложении.
-import { h, toast, download, confirmBox, modal, emptyState, progressBar, printElement, captureFocus, restoreFocus, aggBadge } from '../core/ui.js';
-import { getState, update, viewedAgg, activeAgg, isViewingArchive } from '../core/store.js';
-import { parseCode } from '../parsers/schedule.js';
+import { h, toast, download, confirmBox, modal, emptyState, progressBar, printElement, captureFocus, restoreFocus, aggBadge, moreMenu } from '../core/ui.js';
+import { icon } from '../core/icons.js';
+import { getState, update, viewedAgg, activeAgg, isViewingArchive, bindCode } from '../core/store.js';
+import { parseCode, isDoCode as isDoCodeRaw } from '../parsers/schedule.js';
 import { SHIFTS, ENROLL_SUBJECT_ID } from './journal.js';
 import { go } from '../core/router.js';
 
@@ -48,7 +49,7 @@ function scheduleCodes(st, kind) {
 // docx. Дополнительное образование обозначают другими буквами: Д (доп), У
 // (углублённый), П (проектный) и т.п. Имеет смысл только для официального —
 // у фактических классов такого деления по смыслу нет.
-const isDoCode = (code) => !/^[ТИ]/i.test(norm(code));
+const isDoCode = isDoCodeRaw;
 
 /** Расшифровка направления из легенды расписания: «Д Р - Умные технологии…». */
 function programForCode(st, code, kind) {
@@ -100,8 +101,10 @@ function addGroup(name, program = '', code = null, kind = 'official') {
   if (groupsOf(activeAgg(getState()), kind).some(g => g.name.toLowerCase() === clean.toLowerCase())) { toast(`Группа «${clean}» уже есть`, 'err'); return null; }
   const id = nextId('eg_');
   update(x => {
-    dataOf(activeAgg(x), kind).groups.push({ id, name: clean, program: norm(program), code: code || null, createdAt: new Date().toISOString(), students: [] });
+    dataOf(activeAgg(x), kind).groups.push({ id, name: clean, program: norm(program), code: null, createdAt: new Date().toISOString(), students: [] });
   });
+  // через bindCode: код снимается с сетевой группы, если был на ней
+  if (code) bindCode(code, { type: 'enroll', groupId: id }, kind);
   return id;
 }
 
@@ -151,8 +154,10 @@ export function render(root, params = {}) {
           ? 'Группы дополнительного образования, которые вы набираете сами: состав правится по ходу набора, у каждого ребёнка отмечаются договор и заявление в Навигаторе.'
           : 'Классы, которых нет в официальных сетевых документах, — для фактического журнала: просто список детей, без договора и Навигатора.')),
       h('div', { class: 'head-actions' },
-        groupsOf(agg, kind).length ? h('button', { class: 'btn', onClick: () => download(isDO ? 'Набор_группы_ДО.csv' : 'Фактические_классы.csv', toCsv(groupsOf(agg, kind), isDO), 'text/csv;charset=utf-8') }, '⤓ CSV') : null,
-        groupsOf(agg, kind).length ? h('button', { class: 'btn', onClick: () => printElement(printNode(groupsOf(agg, kind), isDO)) }, '🖨 Печать списков') : null,
+        groupsOf(agg, kind).length ? moreMenu([
+          { label: 'Печать списков всех групп', icon: icon('documents', 16), onClick: () => printElement(printNode(groupsOf(agg, kind), isDO)) },
+          { label: 'Скачать списки (CSV)', icon: icon('sheet', 16), onClick: () => download(isDO ? 'Набор_группы_ДО.csv' : 'Фактические_классы.csv', toCsv(groupsOf(agg, kind), isDO), 'text/csv;charset=utf-8') },
+        ], { label: 'Выгрузить' }) : null,
       )));
 
     wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
@@ -347,7 +352,7 @@ function codeRow(g, st, refresh, kind, readOnly) {
         class: 'mono', style: { width: 'auto' },
         onChange: (e) => {
           const v = e.target.value || null;
-          update(x => { const gr = dataOf(activeAgg(x), kind).groups.find(y => y.id === g.id); if (gr) gr.code = v; });
+          if (v) bindCode(v, { type: 'enroll', groupId: g.id }, kind); else if (g.code) bindCode(g.code, null, kind);
           refresh();
         },
       },

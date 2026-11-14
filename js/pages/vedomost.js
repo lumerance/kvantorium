@@ -54,7 +54,7 @@ export function render(root) {
         h('h1', {}, 'Итоговая ведомость', aggBadge(agg, readOnly)),
         h('p', {}, 'Оценка за заезд — округлённый средний балл из журнала; «н/а», если оценок за заезд нет. Любую ячейку можно поправить вручную.')),
       h('div', { class: 'head-actions' },
-        h('button', { class: 'btn', onClick: () => go('journal') }, '← К журналу'),
+        h('button', { class: 'btn ghost', onClick: () => go('documents') }, '← Документы'),
         h('button', { class: 'btn', onClick: () => window.print() }, '🖨 Печать'),
         h('button', { class: 'btn primary', onClick: () => exportDocx(hd, sections) }, '⤓ Скачать Word'),
       )));

@@ -6,7 +6,7 @@
 // темы при повторном заходе со светлой) — этот модуль только обслуживает
 // саму кнопку и держит её иконку в согласии с текущей темой.
 const KEY = 'kvantorium28.theme';
-const THEME_COLOR = { dark: '#04070a', light: '#eef3f1' };
+const THEME_COLOR = { dark: '#030806', light: '#e4ede8' };
 
 function current() {
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -19,11 +19,12 @@ function apply(theme) {
   if (meta) meta.setAttribute('content', THEME_COLOR[theme]);
 }
 
-export function initThemeToggle(btn) {
+/** renderIcon(theme) — необязательная отрисовка иконки кнопки; без неё — эмодзи. */
+export function initThemeToggle(btn, renderIcon) {
   if (!btn) return;
   const render = () => {
     const t = current();
-    btn.textContent = t === 'light' ? '🌙' : '☀️';
+    if (renderIcon) renderIcon(t); else btn.textContent = t === 'light' ? '🌙' : '☀️';
     btn.title = t === 'light' ? 'Тёмная тема' : 'Светлая тема';
   };
   render();

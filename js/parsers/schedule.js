@@ -143,9 +143,14 @@ export function parseCode(code) {
   };
 }
 
+// Сетевые предметы из списков школ идут под Т (труд) и И (информатика).
+// Остальные буквы (Д, У, П …) — группы дополнительного образования из
+// «Набора»: их нельзя сопоставлять с сетевыми группами по номеру.
+export const isDoCode = (code) => !/^\s*[ТИ]/i.test(String(code || ''));
+
 export function autoMatch(code, subjects) {
   const p = parseCode(code);
-  if (!p) return null;
+  if (!p || isDoCode(code)) return null;
   const byGrade = p.grade ? subjects.filter(s => s.grade === p.grade) : [];
   let pool = byGrade;
   if (!pool.length) {

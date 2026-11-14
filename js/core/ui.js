@@ -127,6 +127,45 @@ export function statCard(label, value, sub, tone = '') {
   ));
 }
 
+/**
+ * Кнопка «⋯ Ещё» с выпадающим меню редких действий страницы — чтобы в шапке
+ * оставалось одно-два главных действия и педагог не терялся в кнопках.
+ * items: {label, icon?, onClick, danger?} | 'sep' | {title} ; пустые (null) пропускаются.
+ */
+export function moreMenu(items, { label = 'Ещё', iconEl = null } = {}) {
+  const list = items.filter(Boolean);
+  const wrap = h('div', { class: 'menu-wrap' });
+  const btn = h('button', { class: 'btn', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, iconEl, label, ' ⋯');
+  let menu = null;
+  const close = () => {
+    if (!menu) return;
+    menu.remove(); menu = null;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', onOutside, true);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onOutside = (e) => { if (!wrap.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
+  btn.addEventListener('click', () => {
+    if (menu) return close();
+    menu = h('div', { class: 'menu', role: 'menu' }, ...list.map(it => {
+      if (it === 'sep') return h('div', { class: 'menu-sep' });
+      if (it.title) return h('div', { class: 'menu-title' }, it.title);
+      return h('button', {
+        class: 'menu-item' + (it.danger ? ' danger' : ''), type: 'button', role: 'menuitem',
+        onClick: () => { close(); it.onClick(); },
+      }, it.icon || null, it.label);
+    }));
+    wrap.append(menu);
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', onOutside, true);
+    document.addEventListener('keydown', onKey);
+    menu.querySelector('.menu-item')?.focus({ preventScroll: true });
+  });
+  wrap.append(btn);
+  return wrap;
+}
+
 export function emptyState(icon, text, action) {
   return h('div', { class: 'empty' }, h('div', { class: 'big' }, icon), h('div', {}, text), action ? h('div', { style: { marginTop: '16px' } }, action) : null);
 }
@@ -135,8 +174,11 @@ export function emptyState(icon, text, action) {
  *  в архивном просмотре — с явной пометкой «только чтение», чтобы не
  *  перепутать с активной агломерацией, куда пишутся новые данные. */
 export function aggBadge(agg, readOnly) {
-  return h('span', { class: 'pill' + (readOnly ? ' warn' : ' cyan'), style: { marginLeft: '10px', verticalAlign: 'middle' } },
-    readOnly ? `🗄 ${agg.name} · архив` : agg.name);
+  // активная агломерация и так видна в верхней строке — на странице плашка
+  // нужна только как предупреждение, что открыт архив (правка недоступна)
+  if (!readOnly && !agg.completedAt) return null;
+  return h('span', { class: 'pill warn', style: { marginLeft: '10px', verticalAlign: 'middle' } },
+    `🗄 ${agg.name} · ${readOnly ? 'архив' : 'завершена'}`);
 }
 
 /* ---------- сохранение фокуса при полной перерисовке (redraw) ---------- */

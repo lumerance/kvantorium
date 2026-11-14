@@ -1,5 +1,6 @@
 // Счётчик часов по индивидуальному плану: сколько закрыто и что осталось.
-import { h, toast, statCard, progressBar, hoursFmt, dateRu, download, modal, confirmBox, fileDrop, emptyState } from '../core/ui.js';
+import { h, toast, statCard, progressBar, hoursFmt, dateRu, download, modal, confirmBox, fileDrop, emptyState, moreMenu } from '../core/ui.js';
+import { icon } from '../core/icons.js';
 import { getState, update, lessonsForGroup, allGroups, viewedAgg } from '../core/store.js';
 import { importPlanFile } from '../parsers/plan.js';
 import { BASE_WORKS, QUICK_ACTIONS } from '../data/works.js';
@@ -54,9 +55,12 @@ export function render(root) {
           : 'Индивидуальный план не импортирован — используется базовый справочник видов работ.')),
       h('div', { class: 'head-actions' },
         h('button', { class: 'btn primary', onClick: () => addEntryDialog(redraw) }, '+ Списать часы'),
-        h('button', { class: 'btn', onClick: () => importDialog(redraw) }, '⤒ Импорт плана (.xlsx)'),
-        h('button', { class: 'btn', onClick: exportXlsx }, '⤓ Excel по форме плана'),
-        st.hoursLog.length ? h('button', { class: 'btn', onClick: exportLog }, '⤓ CSV') : null,
+        moreMenu([
+          { title: 'Индивидуальный план' },
+          { label: st.plan ? 'Загрузить другой план (.xlsx)' : 'Загрузить план (.xlsx)', icon: icon('data', 16), onClick: () => importDialog(redraw) },
+          { label: 'Отчёт в Excel по форме плана', icon: icon('sheet', 16), onClick: exportXlsx },
+          st.hoursLog.length ? { label: 'Журнал списаний (CSV)', icon: icon('hours', 16), onClick: exportLog } : null,
+        ]),
       )));
 
     /* ---- сводка ---- */

@@ -1,36 +1,31 @@
-// Хеш-роутер с плавными переходами между страницами.
+// Хеш-роутер. О смене страницы сообщает событием 'routechange' на window —
+// его слушает оболочка (боковая панель, «хлебные крошки», см. shell.js).
+// Появление страницы — одна CSS-анимация её блоков (.page > *), без
+// View Transition поверх: две анимации входа подряд только тормозят.
 const routes = new Map();
 let currentCleanup = null;
 
 export function route(name, render) { routes.set(name, render); }
 
-function parseHash() {
+export function parseHash() {
   const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
   const [path, query] = h.split('?');
   const params = Object.fromEntries(new URLSearchParams(query || ''));
   return { name: path.split('/')[0] || 'dashboard', params };
 }
 
-async function paint() {
-  const { name, params } = parseHash();
-  const render = routes.get(name) || routes.get('dashboard');
+function paint() {
+  let { name, params } = parseHash();
+  if (!routes.has(name)) name = 'dashboard';
   const view = document.getElementById('view');
-
-  document.querySelectorAll('.nav-btn').forEach(a => a.classList.toggle('active', a.dataset.route === name));
-
-  const run = () => {
-    if (currentCleanup) { try { currentCleanup(); } catch {} }
-    view.innerHTML = '';
-    const el = document.createElement('div');
-    el.className = 'page';
-    view.appendChild(el);
-    currentCleanup = render(el, params) || null;
-    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
-  };
-
-  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    document.startViewTransition(run);
-  } else run();
+  if (currentCleanup) { try { currentCleanup(); } catch { /* страница уже снята */ } }
+  view.innerHTML = '';
+  const el = document.createElement('div');
+  el.className = 'page';
+  view.appendChild(el);
+  currentCleanup = routes.get(name)(el, params) || null;
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  window.dispatchEvent(new CustomEvent('routechange', { detail: { name, params } }));
 }
 
 export function startRouter() {

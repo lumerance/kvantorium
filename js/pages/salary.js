@@ -1,8 +1,10 @@
 // Калькулятор заработной платы: ставка + ГПХ, сравнение с 1,5 ставки.
-import { h, money, money0, toast, statCard, download, MONTHS, captureFocus, restoreFocus } from '../core/ui.js';
+import { h, money, money0, toast, statCard, download, MONTHS, captureFocus, restoreFocus, moreMenu } from '../core/ui.js';
+import { icon } from '../core/icons.js';
 import { getState, update } from '../core/store.js';
 import { WORK_DAYS, YEARS, workDays, yearTotal, isPreliminary } from '../data/calendar.js';
 import * as vacation from './vacation.js';
+import { forecastCard } from './vacation-forecast.js';
 import * as salaryHistoryPage from './salary-history.js';
 
 /**
@@ -245,8 +247,8 @@ function renderCalcTab(root) {
         h('p', {}, `${MONTHS[s.month - 1]} ${s.year} · норма ${autoDays ?? '—'} раб. дн. · введено ${s.workDays} дн., РВ — ${s.rv}` +
           (partial ? ` · неполный месяц: отработано ${r.current.fact} из ${r.current.norm} дн.` : ''))),
       h('div', { class: 'head-actions' },
-        h('button', { class: 'btn', onClick: () => saveHistory(r) }, '💾 Сохранить расчёт'),
-        h('button', { class: 'btn', onClick: () => exportCsv(r, s) }, '⤓ CSV'),
+        h('button', { class: 'btn primary', onClick: () => saveHistory(r) }, '💾 Сохранить расчёт'),
+        moreMenu([{ label: 'Выгрузить расчёт (CSV)', icon: icon('sheet', 16), onClick: () => exportCsv(r, s) }]),
       )));
 
     /* --- формат работы --- */
@@ -280,6 +282,10 @@ function renderCalcTab(root) {
       statCard('Стоимость одного РВ', '+' + money0(r.current.rvMarginalNet),
         `на руки · до НДФЛ +${money0(r.current.rvMarginalGross)}`, 'amber'),
     ));
+
+    /* --- прогноз отпускных: если и дальше зарабатывать как в этом месяце --- */
+    const fullNet = partial ? calcAll({ ...p, factDays: null }).current.net : r.current.net;
+    wrap.append(h('div', { style: { marginBottom: '16px' } }, forecastCard(r.current, fullNet, redraw)));
 
     /* --- ввод --- */
     const monthSel = h('select', {

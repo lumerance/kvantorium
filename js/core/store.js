@@ -231,8 +231,43 @@ export function viewedAgg(st = state) {
   return st.agglomerations.find(a => a.id === id) || activeAgg(st);
 }
 
+/** true — просматриваемую агломерацию править нельзя: это не активная
+ *  (архив) или она уже завершена (часы по ней списаны). */
 export function isViewingArchive(st = state) {
-  return viewedAgg(st).id !== activeAgg(st).id;
+  const v = viewedAgg(st);
+  return v.id !== activeAgg(st).id || !!v.completedAt;
+}
+
+/** Завершает агломерацию: закрывает её для правки и записывает списанные
+ *  часы в журнал часов. entries — записи hoursLog без id/aggId. */
+export function completeAgglomeration(id, entries) {
+  const base = Date.now();
+  const made = entries.map((e, i) => ({ ...e, id: base + i, aggId: id, source: 'agglomeration' }));
+  update(x => {
+    const a = x.agglomerations.find(y => y.id === id);
+    if (!a || a.completedAt) return;
+    x.hoursLog.push(...made);
+    a.completedAt = new Date().toISOString();
+    a.completion = {
+      entryIds: made.map(e => e.id),
+      teaching: made.filter(e => e.kind === 'teaching').reduce((t, e) => t + e.hours, 0),
+      method: made.filter(e => e.kind !== 'teaching').reduce((t, e) => t + e.hours, 0),
+    };
+  });
+  return made.length;
+}
+
+/** Снова открывает завершённую агломерацию для правки — и убирает из журнала
+ *  часов ровно те записи, что были списаны при её завершении. */
+export function reopenAgglomeration(id) {
+  update(x => {
+    const a = x.agglomerations.find(y => y.id === id);
+    if (!a || !a.completedAt) return;
+    const ids = new Set(a.completion?.entryIds || []);
+    x.hoursLog = x.hoursLog.filter(e => !ids.has(e.id));
+    delete a.completedAt;
+    delete a.completion;
+  });
 }
 
 export function allAgglomerations(st = state) {
@@ -404,19 +439,48 @@ export function autoMapAll(kind = null) {
   const agg = activeAgg(state);
   const data = ns(agg, kind);
   const subjects = data.students?.subjects || [];
-  if (!subjects.length) return 0;
   const codes = new Set();
   for (const sh of [1, 2, 3]) for (const c of (data.schedules[String(sh)]?.codes || [])) codes.add(c);
+  const key = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
   let n = 0;
   update(x => {
     const root = ns(activeAgg(x), kind);
+    const enroll = root.enroll?.groups || [];
     for (const c of codes) {
-      if (root.mapping[c]) continue;
-      const m = autoMatch(c, subjects);
+      if (root.mapping[c] || enroll.some(g => g.code === c)) continue;
+      // группа «Набора» с тем же названием, что и код (У1, «Д Р1») — привязываем к ней
+      const eg = enroll.find(g => !g.code && key(g.name) === key(c));
+      if (eg) { eg.code = c; n++; continue; }
+      const m = subjects.length ? autoMatch(c, subjects) : null;
       if (m) { root.mapping[c] = m; n++; }
     }
   });
   return n;
+}
+
+/** Код расписания -> к чему он привязан: {type:'group', subjectId, groupId}
+ *  (сетевая группа через mapping), {type:'enroll', groupId} (группа «Набора»,
+ *  код хранится прямо в ней) или null. */
+export function codeBinding(root, code) {
+  const eg = (root.enroll?.groups || []).find(g => g.code === code);
+  if (eg) return { type: 'enroll', groupId: eg.id };
+  const m = root.mapping?.[code];
+  return m ? { type: 'group', ...m } : null;
+}
+
+/** Привязывает код к сетевой группе, к группе «Набора» или снимает привязку
+ *  (target = null). Код всегда привязан максимум к одному месту. */
+export function bindCode(code, target, kind = null) {
+  update(x => {
+    const root = ns(activeAgg(x), kind);
+    delete root.mapping[code];
+    for (const g of root.enroll?.groups || []) if (g.code === code) g.code = null;
+    if (target?.type === 'group') root.mapping[code] = { subjectId: target.subjectId, groupId: target.groupId };
+    if (target?.type === 'enroll') {
+      const g = (root.enroll?.groups || []).find(y => y.id === target.groupId);
+      if (g) g.code = code;
+    }
+  });
 }
 
 /** Оставляет в расписании заезда только занятия выбранных педагогов и кодов.
