@@ -67,14 +67,25 @@ export function table(widths, rows, opts = {}) {
 /**
  * Собирает .docx из готовых блоков (строк XML, полученных из p() и table()).
  * @param {string[]} blocks
- * @param {{landscape?:boolean}} opts
+ * @param {{landscape?:boolean, page?:{w,h}, margins?:object, defaults?:{font, size, line}}} opts
+ *   defaults — шрифт/кегль/межстрочный по умолчанию для всего документа (styles.xml)
  */
 export async function buildDocx(blocks, opts = {}) {
-  const pageW = opts.landscape ? 16838 : 11906;
-  const pageH = opts.landscape ? 11906 : 16838;
+  const pageW = opts.page?.w || (opts.landscape ? 16838 : 11906);
+  const pageH = opts.page?.h || (opts.landscape ? 11906 : 16838);
   const m = { top: 850, right: 850, bottom: 850, left: 1134, ...(opts.margins || {}) };
   const sect = `<w:sectPr><w:pgSz w:w="${pageW}" w:h="${pageH}"${opts.landscape ? ' w:orient="landscape"' : ''}/>` +
     `<w:pgMar w:top="${m.top}" w:right="${m.right}" w:bottom="${m.bottom}" w:left="${m.left}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`;
+  const d = opts.defaults;
+  const styles = d ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${d.font}" w:eastAsia="${d.font}" w:hAnsi="${d.font}" w:cs="${d.font}"/>` +
+    `<w:sz w:val="${HALF_PT(d.size)}"/><w:szCs w:val="${HALF_PT(d.size)}"/><w:lang w:val="ru-RU" w:eastAsia="ru-RU" w:bidi="ar-SA"/></w:rPr></w:rPrDefault>` +
+    `<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="${d.line || 240}" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>
+<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/>` +
+    `<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>
+</w:styles>` : null;
 
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -85,7 +96,12 @@ export async function buildDocx(blocks, opts = {}) {
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+${styles ? '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' : ''}
 </Types>`;
+  const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${styles ? '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' : ''}
+</Relationships>`;
 
   const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -96,6 +112,7 @@ export async function buildDocx(blocks, opts = {}) {
     { name: '[Content_Types].xml', data: contentTypes },
     { name: '_rels/.rels', data: rels },
     { name: 'word/document.xml', data: document },
+    ...(styles ? [{ name: 'word/styles.xml', data: styles }, { name: 'word/_rels/document.xml.rels', data: docRels }] : []),
   ]);
   return new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }

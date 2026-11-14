@@ -179,7 +179,7 @@ export function openScheduleGenerator() {
               : 'Укажите даты заезда.')),
         h('div', {},
           h('h4', { class: 'sg-h' }, 'Шапка: школа'),
-          h('label', { class: 'field' }, h('span', {}, 'Школа (как в «Директор …»)'), txt(state.school, 'name', 'МОБУ «Увальская СОШ»')),
+          h('label', { class: 'field' }, h('span', {}, 'Школа (после «Директор школы»)'), txt(state.school, 'name', 'МОБУ «Увальская СОШ»')),
           h('div', { class: 'row', style: { marginTop: '10px' } },
             h('label', { class: 'field' }, h('span', {}, 'Населённый пункт'), txt(state.school, 'locality', 'с. Новокиевский Увал Амурской области')),
             h('label', { class: 'field' }, h('span', {}, 'Директор (Фамилия И.О.)'), txt(state.school, 'director', 'Онищенко Н.В.'))),
