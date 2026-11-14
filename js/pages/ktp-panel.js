@@ -179,9 +179,9 @@ export function programsCard(agg, redraw, readOnly) {
 
   if (!readOnly) {
     body.append(fileDrop({
-      title: programs.length ? 'Загрузить ещё одну программу (.docx)' : 'Учебная программа с КТП (.docx)',
+      title: programs.length ? 'Загрузить ещё одну программу (.docx или .pdf)' : 'Учебная программа с КТП (.docx или .pdf)',
       hint: 'из документа берётся таблица КТП: тема, содержание, тип занятия, часы',
-      accept: '.docx',
+      accept: '.docx,.pdf',
       onFile: async (file) => {
         try {
           const res = await importKtpFile(file);
@@ -199,9 +199,9 @@ export function programsCard(agg, redraw, readOnly) {
     }));
 
     body.append(h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' } },
-      h('button', { class: 'btn sm', onClick: () => pasteModal(redraw) }, '⤒ Вставить КТП таблицей (из PDF, Word, Excel)')));
+      h('button', { class: 'btn sm', onClick: () => pasteModal(redraw) }, '⤒ Вставить КТП таблицей (из Word, Excel)')));
     body.append(h('p', { class: 'muted', style: { fontSize: '12px', margin: '10px 0 0' } },
-      'PDF напрямую пока не читается: откройте программу, выделите таблицу КТП, скопируйте и вставьте её кнопкой выше — колонки распознаются, а что не угадалось, поправите вручную.'));
+      'PDF читается напрямую, если он сохранён из Word или другого редактора, а таблица КТП нарисована с рамками. Скан (фото страниц) не распознаётся — для него загрузите сам .docx программы.'));
   }
 
   return h('div', { class: 'card' }, h('h3', {}, '5. Учебные программы (КТП)'), body);
@@ -421,7 +421,7 @@ function pasteModal(redraw) {
 
   const body = h('div', {},
     h('p', { class: 'muted', style: { marginTop: 0 } },
-      'Из Word и Excel таблица вставляется колонками автоматически. Из PDF колонки распознаются по крупным пробелам — если разъехалось, поправьте потом в «Показать КТП».'),
+      'Из Word и Excel таблица вставляется колонками автоматически. Скопированный текст из PDF распознаётся по крупным пробелам, но ненадёжно — PDF лучше загрузить файлом. Если разъехалось, поправьте потом в «Показать КТП».'),
     ta,
     h('div', { style: { marginTop: '10px' } },
       h('button', {
