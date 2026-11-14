@@ -495,6 +495,17 @@ table.vedomost tr.sec td{background:rgba(43,255,139,.07);color:var(--neon);text-
 .enroll-table td .cell-input:hover{border-color:var(--line)}
 .enroll-table td .cell-input:focus{background:var(--input-bg)}
 .enroll-table td .cell-input.muted{color:var(--muted);min-width:150px}
+/* окно «Показать КТП»: без горизонтальной прокрутки, длинный текст переносится */
+table.ktp-table{table-layout:fixed}
+table.ktp-table td{white-space:normal;vertical-align:top}
+table.ktp-table th{white-space:normal}
+table.ktp-table .cell-text,table.ktp-table .cell-input{
+  display:block;width:100%;min-width:0;border:1px solid transparent;background:transparent;border-radius:7px;
+  padding:4px 7px;font-size:12.5px;line-height:1.4;
+}
+table.ktp-table .cell-text{resize:none;overflow:hidden;font-family:inherit;color:inherit}
+table.ktp-table .cell-text:hover,table.ktp-table .cell-input:hover{border-color:var(--line)}
+table.ktp-table .cell-text:focus,table.ktp-table .cell-input:focus{background:var(--input-bg)}
 /* группа/строка, найденная поиском по ФИО ребёнка */
 .card.search-hit{border-color:rgba(43,255,139,.55);box-shadow:var(--shadow-neon)}
 .enroll-table tr.row-hit{background:rgba(43,255,139,.08)}

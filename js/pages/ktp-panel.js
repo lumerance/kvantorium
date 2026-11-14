@@ -334,6 +334,19 @@ function ktpModal(program, redraw, readOnly) {
     if (r) Object.assign(r, patch);
   });
 
+  // Многострочное поле, растущее по высоте под текст: длинное содержание
+  // занятия видно целиком, а не обрезается краем узкой колонки.
+  const grow = (ta) => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+  const growAll = () => requestAnimationFrame(() => tbody.querySelectorAll('textarea').forEach(grow));
+  const textCell = (value, onSave) => {
+    const ta = h('textarea', { class: 'cell-text', rows: 1, disabled: readOnly, onChange: (e) => onSave(norm(e.target.value)) });
+    ta.value = value || '';
+    ta.addEventListener('input', () => grow(ta));
+    // Enter — сохранить и выйти из поля (переносы строк в КТП не нужны)
+    ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); } });
+    return h('td', {}, ta);
+  };
+
   const fill = () => {
     tbody.innerHTML = '';
     const cur = (viewedAgg(getState()).programs || []).find(y => y.id === program.id);
@@ -342,11 +355,11 @@ function ktpModal(program, redraw, readOnly) {
       const from = hour + 1; hour += Math.max(1, Number(r.hours) || 1);
       tbody.append(h('tr', {},
         h('td', { class: 'num muted mono' }, from === hour ? String(from) : `${from}–${hour}`),
-        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.theme, disabled: readOnly, onChange: (e) => setRow(i, { theme: norm(e.target.value) }) })),
-        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.content, disabled: readOnly, onChange: (e) => setRow(i, { content: norm(e.target.value) }) })),
-        h('td', {}, h('input', { type: 'text', class: 'cell-input', value: r.type, disabled: readOnly, onChange: (e) => setRow(i, { type: norm(e.target.value) }) })),
+        textCell(r.theme, (v) => setRow(i, { theme: v })),
+        textCell(r.content, (v) => setRow(i, { content: v })),
+        textCell(r.type, (v) => setRow(i, { type: v })),
         h('td', {}, h('input', {
-          type: 'text', inputmode: 'numeric', class: 'cell-input', value: r.hours, style: { width: '56px', textAlign: 'center' }, disabled: readOnly,
+          type: 'text', inputmode: 'numeric', class: 'cell-input', value: r.hours, style: { width: '100%', textAlign: 'center' }, disabled: readOnly,
           onChange: (e) => { setRow(i, { hours: Math.max(1, parseInt(e.target.value, 10) || 1) }); fill(); },
         })),
         readOnly ? h('td', {}) : h('td', {}, h('button', {
@@ -357,15 +370,21 @@ function ktpModal(program, redraw, readOnly) {
           }
         }, '×'))));
     });
+    growAll();
   };
   fill();
 
   body.append(h('p', { class: 'muted', style: { marginTop: 0 } },
     readOnly ? 'Архивная агломерация — КТП показано только для просмотра.' : 'Первая колонка — какие часы программы занимает строка. Правки сохраняются сразу.'));
-  body.append(h('div', { class: 'table-wrap' }, h('table', { class: 'compact enroll-table' },
+  // фиксированная раскладка колонок: таблица всегда во всю ширину окна, без
+  // горизонтальной прокрутки, текст переносится внутри ячеек
+  body.append(h('div', { class: 'table-wrap' }, h('table', { class: 'compact ktp-table' },
+    h('colgroup', {},
+      h('col', { style: { width: '64px' } }), h('col', { style: { width: '24%' } }), h('col', {}),
+      h('col', { style: { width: '20%' } }), h('col', { style: { width: '64px' } }), h('col', { style: { width: '44px' } })),
     h('thead', {}, h('tr', {},
-      h('th', { style: { width: '70px' } }, 'Часы'), h('th', {}, 'Тема'), h('th', {}, 'Содержание'),
-      h('th', { style: { width: '18%' } }, 'Тип занятия'), h('th', { style: { width: '70px' } }, 'Часов'), h('th', { style: { width: '44px' } }, ''))),
+      h('th', {}, 'Часы'), h('th', {}, 'Тема'), h('th', {}, 'Содержание'),
+      h('th', {}, 'Тип занятия'), h('th', {}, 'Часов'), h('th', {}, ''))),
     tbody)));
   if (!readOnly) body.append(h('div', { style: { marginTop: '10px' } },
     h('button', {
@@ -375,7 +394,7 @@ function ktpModal(program, redraw, readOnly) {
       }
     }, '+ Строка')));
 
-  modal({ wide: true, title: `КТП · ${program.name}`, body, okText: readOnly ? null : 'Готово', onOk: readOnly ? undefined : () => redraw(), cancelText: 'Закрыть' });
+  modal({ wide: 'xl', title: `КТП · ${program.name}`, body, okText: readOnly ? null : 'Готово', onOk: readOnly ? undefined : () => redraw(), cancelText: 'Закрыть' });
 }
 
 /* ---------- вставка КТП таблицей ---------- */

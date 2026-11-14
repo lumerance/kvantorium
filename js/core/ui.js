@@ -29,7 +29,9 @@ export function toast(msg, kind = 'ok', ms = 4200) {
 
 export function modal({ title, body, okText = 'Готово', cancelText = 'Отмена', onOk, wide }) {
   const root = document.getElementById('modal-root');
-  const box = h('div', { class: 'modal', style: wide ? { width: 'min(1100px,96vw)' } : null });
+  // wide: true — широкое окно, 'xl' — почти на весь экран (большие таблицы)
+  const width = wide === 'xl' ? 'min(1500px,97vw)' : wide ? 'min(1100px,96vw)' : null;
+  const box = h('div', { class: 'modal', style: width ? { width } : null });
   box.append(h('h3', {}, title));
   box.append(body);
   const close = () => { back.remove(); };
