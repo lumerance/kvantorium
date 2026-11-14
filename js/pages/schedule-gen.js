@@ -84,6 +84,7 @@ export function openScheduleGenerator() {
     comment: '',
     variant: 0,
     grid: null,
+    second: { enabled: true, direction: '', first: true, ...(cfg.second || {}) },
   };
 
   const aggOf = () => aggs.find(a => a.id === state.aggId) || aggs[0];
@@ -187,6 +188,16 @@ export function openScheduleGenerator() {
             h('label', { class: 'field' }, h('span', {}, 'Должность'), txt(state.kv, 'title')),
             h('label', { class: 'field' }, h('span', {}, 'И.О. Фамилия'), txt(state.kv, 'head'))),
           h('label', { class: 'field', style: { marginTop: '10px' } }, h('span', {}, 'Направление (педагог) — строка над уроками'), txt(state, 'direction', 'VR/AR/IT (Рафальский К.)')),
+          h('h4', { class: 'sg-h', style: { marginTop: '14px' } }, 'Второй педагог'),
+          h('label', { class: 'check-pill', style: { display: 'inline-flex' } },
+            h('input', { type: 'checkbox', checked: state.second.enabled, style: { width: 'auto', margin: 0 }, onChange: (e) => { state.second.enabled = e.target.checked; step1(); } }),
+            h('span', {}, 'Пустая таблица второго педагога (те же даты и уроки — он заполнит сам)')),
+          state.second.enabled ? h('div', { class: 'row', style: { marginTop: '10px' } },
+            h('label', { class: 'field' }, h('span', {}, 'Направление (педагог)'), txt(state.second, 'direction', 'Робототехника (Приходько А.)')),
+            h('label', { class: 'field' }, h('span', {}, 'Где в таблице'),
+              h('select', { onChange: (e) => { state.second.first = e.target.value === 'first'; } },
+                h('option', { value: 'first', selected: state.second.first }, 'Выше моего блока'),
+                h('option', { value: 'last', selected: !state.second.first }, 'Ниже моего блока')))) : null,
           h('label', { class: 'field', style: { marginTop: '10px' } }, h('span', {}, 'Комментарий под расписанием'),
             h('textarea', { rows: 3, onInput: (e) => { state.comment = e.target.value; } }, state.comment)))),
 
@@ -228,7 +239,7 @@ export function openScheduleGenerator() {
     update(x => {
       x.scheduleDrafts = { ...(x.scheduleDrafts || {}), [draftKey(aggId, shift)]: { from, to, fiveDay, groups, grid, variant, savedAt: new Date().toISOString() } };
       x.scheduleGen = {
-        ...(x.scheduleGen || {}), fiveDay, kv: state.kv, direction: state.direction, comment: state.comment,
+        ...(x.scheduleGen || {}), fiveDay, kv: state.kv, direction: state.direction, comment: state.comment, second: state.second,
         schools: { ...(x.scheduleGen?.schools || {}), [place]: { ...state.school } },
       };
     });
@@ -281,7 +292,8 @@ export function openScheduleGenerator() {
       issues.length
         ? h('p', { class: 'sg-issues' }, icon('alert', 15), issues.slice(0, 4).map(i => `${shortDate(i.date)}: ${i.text}`).join(' · ') + (issues.length > 4 ? ` · и ещё ${issues.length - 4}` : ''))
         : h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '0 0 10px' } },
-          'Клетку можно поменять — выберите другую группу или «—». Правки сохраняются сами, к ним можно вернуться позже.'),
+          'Клетку можно поменять — выберите другую группу или «—». Правки сохраняются сами, к ним можно вернуться позже.' +
+          (state.second.enabled ? ' В Word будет ещё пустой блок второго педагога с теми же датами и уроками.' : '')),
       ...weeks.map(weekTable));
   }
 
@@ -294,7 +306,7 @@ export function openScheduleGenerator() {
       const blob = await buildScheduleDocx({
         school: state.school, kv: state.kv, yearLabel: yearLabel(state.from),
         place: placeTitle(place), shift: state.shift, direction: state.direction,
-        days, fiveDay: state.fiveDay, grid: state.grid, times: DEFAULT_TIMES, comment: state.comment,
+        days, fiveDay: state.fiveDay, grid: state.grid, times: DEFAULT_TIMES, comment: state.comment, second: state.second,
       });
       download(`Расписание ${place ? place + ' ' : ''}${state.shift} заезд.docx`, blob);
       toast(issues.length ? `Расписание скачано. Обратите внимание: ${issues.length} замечаний` : 'Расписание скачано');

@@ -10,7 +10,8 @@ const dm = (iso) => { const [, m, d] = iso.split('-'); return `${d}.${m}`; };
 /**
  * @param {object} o
  *  {school:{name, locality, director}, kv:{title, head}, yearLabel, place, shift,
- *   direction, days, fiveDay, grid, times, comment}
+ *   direction, days, fiveDay, grid, times, comment,
+ *   second:{enabled, direction, first} — пустой блок второго педагога}
  */
 export async function buildScheduleDocx(o) {
   const blocks = [];
@@ -42,13 +43,20 @@ export async function buildScheduleDocx(o) {
       { text: `${w.no} неделя\n${dm(w.from)}-${short(w.to)}`, bold: true, size: 12 },
       ...w.days.map(d => ({ text: d.date ? `${d.weekday}\n${short(d.date)}` : d.weekday, bold: true, align: 'center', size: 12 })),
     ]);
-    rows.push([{ text: o.direction || '', bold: true, align: 'center', size: 12, span: cols + 1 }]);
-    o.times.forEach((t, i) => {
-      rows.push([
-        { text: `${i + 1}. ${t}`, size: 12 },
-        ...w.days.map(d => ({ text: d.date ? (o.grid[d.date]?.[i] || '') : '', align: 'center', size: 12 })),
-      ]);
-    });
+    // блок педагога: строка «Направление (Педагог)» и уроки; у второго педагога — пустые клетки
+    const section = (direction, grid) => {
+      rows.push([{ text: direction || '', bold: true, align: 'center', size: 12, span: cols + 1 }]);
+      o.times.forEach((t, i) => {
+        rows.push([
+          { text: `${i + 1}. ${t}`, size: 12 },
+          ...w.days.map(d => ({ text: (grid && d.date) ? (grid[d.date]?.[i] || '') : '', align: 'center', size: 12 })),
+        ]);
+      });
+    };
+    const mine = () => section(o.direction, o.grid);
+    const other = () => section(o.second.direction || 'Направление (Педагог)', null);
+    if (o.second?.enabled && o.second.first) { other(); mine(); }
+    else { mine(); if (o.second?.enabled) other(); }
     blocks.push(table(widths, rows, { widthCm: W, header: 2 }));
     blocks.push(p('', { size: 8, spacingAfter: 6 }));
   }

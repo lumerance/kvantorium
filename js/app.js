@@ -1,3 +1,4 @@
+import * as appearance from './pages/appearance.js';
 import { route, startRouter } from './core/router.js';
 import { initShell } from './core/shell.js';
 import * as dashboard from './pages/dashboard.js';
@@ -17,6 +18,7 @@ route('salary', salary.render);
 route('data', data.render);
 route('vedomost', vedomost.render);
 route('documents', documents.render);
+route('appearance', appearance.render);
 
 initShell();
 startRouter();

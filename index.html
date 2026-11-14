@@ -15,6 +15,10 @@
       var m = document.querySelector('meta[name="theme-color"]');
       if (m) m.setAttribute('content', '#e4ede8');
     }
+    var a = JSON.parse(localStorage.getItem('kvantorium28.appearance') || '{}');
+    var el = document.documentElement;
+    if (a.accent && a.accent !== 'green') el.setAttribute('data-accent', a.accent);
+    ['glass', 'glow', 'bglight', 'motion'].forEach(function (k) { if (a[k] === false) el.setAttribute('data-' + k, 'off'); });
   } catch (e) {}
 })();
 </script>

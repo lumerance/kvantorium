@@ -175,7 +175,7 @@ function worksTable(c, redraw) {
   const body = h('tbody', {});
   for (const [key, list] of groups) {
     const [kind, cat] = key.split('|');
-    body.append(h('tr', {}, h('td', { colspan: 6, style: { background: 'rgba(43,255,139,.05)', fontWeight: '700' } },
+    body.append(h('tr', {}, h('td', { colspan: 6, style: { background: 'rgba(var(--accent-rgb),.05)', fontWeight: '700' } },
       h('span', { class: `pill ${kind === 'teaching' ? 'cyan' : 'ok'}` }, KIND_LABEL[kind]), ' ', cat)));
     for (const w of list) {
       const rec = c.byWork.get(w.id) || { done: 0, count: 0 };

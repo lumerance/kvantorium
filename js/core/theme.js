@@ -28,10 +28,15 @@ export function initThemeToggle(btn, renderIcon) {
     btn.title = t === 'light' ? 'Тёмная тема' : 'Светлая тема';
   };
   render();
-  btn.addEventListener('click', () => {
-    const next = current() === 'light' ? 'dark' : 'light';
-    try { localStorage.setItem(KEY, next); } catch { /* localStorage недоступен — тема просто не запомнится */ }
-    apply(next);
-    render();
-  });
+  btn.addEventListener('click', () => setTheme(current() === 'light' ? 'dark' : 'light'));
+  window.addEventListener('themechange', render);
+}
+
+export const currentTheme = () => current();
+
+/** Сменить тему (кнопка в шапке и страница «Оформление»). */
+export function setTheme(next) {
+  try { localStorage.setItem(KEY, next); } catch { /* localStorage недоступен — тема просто не запомнится */ }
+  apply(next);
+  window.dispatchEvent(new CustomEvent('themechange', { detail: next }));
 }

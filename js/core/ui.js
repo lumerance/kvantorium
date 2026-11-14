@@ -253,3 +253,50 @@ export function switchToggle(on, label, onChange, { title } = {}) {
   }, h('span', { class: 'switch-track' }, h('span', { class: 'switch-thumb' })), label ? h('span', { class: 'switch-label' }, label) : null);
   return btn;
 }
+
+/**
+ * Контекстное меню (по правой кнопке мыши) в точке (x, y).
+ * items — как у moreMenu, плюс {swatches:[{value,color,label,active}], onPick} — ряд цветных кружков.
+ */
+let ctxClose = null;
+export function contextMenu(x, y, items) {
+  ctxClose?.();
+  const menu = h('div', { class: 'menu ctx-menu', role: 'menu' });
+  const close = () => {
+    menu.remove(); ctxClose = null;
+    document.removeEventListener('pointerdown', onOutside, true);
+    document.removeEventListener('keydown', onKey);
+    window.removeEventListener('scroll', close, true);
+    window.removeEventListener('resize', close);
+  };
+  const onOutside = (e) => { if (!menu.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  for (const it of items.filter(Boolean)) {
+    if (it === 'sep') { menu.append(h('div', { class: 'menu-sep' })); continue; }
+    if (it.title) { menu.append(h('div', { class: 'menu-title' }, it.title)); continue; }
+    if (it.swatches) {
+      menu.append(h('div', { class: 'ctx-swatches' }, ...it.swatches.map(sw => h('button', {
+        type: 'button', class: 'ctx-swatch' + (sw.active ? ' on' : ''), title: sw.label, 'aria-label': sw.label,
+        style: `--c:${sw.color}`, onClick: () => { close(); it.onPick(sw.value); },
+      }))));
+      continue;
+    }
+    menu.append(h('button', {
+      class: 'menu-item' + (it.danger ? ' danger' : ''), type: 'button', role: 'menuitem',
+      onClick: () => { close(); it.onClick(); },
+    }, it.icon || null, it.label));
+  }
+  document.body.append(menu);
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
+  menu.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
+  setTimeout(() => {
+    document.addEventListener('pointerdown', onOutside, true);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+  });
+  ctxClose = close;
+  (menu.querySelector('.menu-item, .ctx-swatch'))?.focus({ preventScroll: true });
+  return close;
+}

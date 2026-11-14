@@ -10,6 +10,7 @@
 import { h } from './ui.js';
 import { icon } from './icons.js';
 import { initThemeToggle } from './theme.js';
+import { motionOff } from './appearance.js';
 import { getState, subscribe, viewedAgg, isViewingArchive } from './store.js';
 
 // Пункты меню: key — что подсвечивать, match — какие маршруты к нему относятся.
@@ -26,6 +27,7 @@ const NAV = [
   { key: 'documents', href: '#/documents', label: 'Документы', icon: 'documents' },
   { spacer: true },
   { key: 'data', href: '#/data', label: 'Данные и импорт', icon: 'data' },
+  { key: 'appearance', href: '#/appearance', label: 'Оформление', icon: 'palette' },
 ];
 
 // маршрут -> пункт меню и «хлебные крошки»
@@ -35,12 +37,12 @@ function locate(name, params) {
     : { key: 'journal', crumbs: ['Работа с детьми', 'Журнал'] };
   if (name === 'vedomost') return { key: 'documents', crumbs: ['Документы', 'Итоговая ведомость'] };
   const item = NAV.find(n => n.key === name);
-  const section = { enroll: 'Работа с детьми', hours: 'Учёт', salary: 'Учёт', documents: 'Бумаги' }[name];
+  const section = { enroll: 'Работа с детьми', hours: 'Учёт', salary: 'Учёт', documents: 'Бумаги', appearance: 'Настройки' }[name];
   return { key: name, crumbs: [section, item?.label || 'Обзор'].filter(Boolean) };
 }
 
 const SIDEBAR_KEY = 'kvantorium28.sidebar';
-const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reduceMotion = motionOff;
 
 const easeOut3 = (t) => 1 - Math.pow(1 - t, 3);                                   // power3.out
 const easeInOut3 = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2); // power3.inOut

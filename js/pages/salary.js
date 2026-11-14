@@ -1,5 +1,5 @@
 // Калькулятор заработной платы: ставка + ГПХ, сравнение с 1,5 ставки.
-import { h, money, money0, toast, statCard, download, MONTHS, captureFocus, restoreFocus, moreMenu, modal } from '../core/ui.js';
+import { h, money, money0, toast, statCard, download, MONTHS, captureFocus, restoreFocus, moreMenu, modal, contextMenu } from '../core/ui.js';
 import { icon } from '../core/icons.js';
 import { getState, update } from '../core/store.js';
 import { WORK_DAYS, YEARS, workDays, yearTotal, isPreliminary } from '../data/calendar.js';
@@ -70,6 +70,19 @@ export function calcAll(p) {
   const withGph = current.net + (hasGph ? gphNet : 0);
   return { half, one, oneHalf, gphNet, rate, hasGph, current, withGph, benefit: withGph - oneHalf.net };
 }
+
+/** Палитра цифр в плитках (ПКМ по плитке). */
+const TILE_TONES = [
+  { value: '', label: 'Основной цвет', color: 'var(--neon)' },
+  { value: 'cyan', label: 'Голубой', color: 'var(--cyan)' },
+  { value: 'blue', label: 'Синий', color: 'var(--blue)' },
+  { value: 'violet', label: 'Фиолетовый', color: 'var(--violet)' },
+  { value: 'magenta', label: 'Розовый', color: 'var(--magenta)' },
+  { value: 'red', label: 'Красный', color: 'var(--red)' },
+  { value: 'orange', label: 'Оранжевый', color: 'var(--orange)' },
+  { value: 'amber', label: 'Жёлтый', color: 'var(--amber)' },
+  { value: 'plain', label: 'Как текст', color: 'var(--text)' },
+];
 
 /** Постоянные величины: оклад, надбавки, ГПХ, проценты. */
 const CONST_KEYS = [
@@ -166,19 +179,14 @@ export function comparisonCard(r, p, { onChange } = {}) {
     const { a, b, cur } = compareKeys(r);
     const A = formatTotals(r, p, a), B = formatTotals(r, p, b);
     const diff = A.net - B.net;
-    const pick = (side, value) => h('div', { class: 'cmp-pick', role: 'radiogroup', 'aria-label': side === 'a' ? 'Формат A' : 'Формат B' },
-      ...FORMATS.map(f => h('label', { class: 'check-pill' + (f.key === value ? ' on' : '') },
-        h('input', {
-          type: 'radio', name: `cmp-${side}`, checked: f.key === value, style: { width: 'auto', margin: 0 },
-          onChange: () => {
-            update(x => { x.ui.salaryCompare = { ...(x.ui.salaryCompare || {}), [side]: f.key }; });
-            draw(); onChange?.();
-          },
-        }),
-        h('span', {}, f.label + (f.key === cur ? ' · сейчас' : '')))));
-    const col = (title, T, cls) => h('div', { class: 'cmp-col' },
-      h('h4', {}, title),
-      h('div', { class: 'pill ' + cls, style: { marginBottom: '10px' } }, T.label),
+    const pick = (side, value) => h('select', {
+      class: 'cmp-select', 'aria-label': side === 'a' ? 'Формат A' : 'Формат B',
+      onChange: (e) => {
+        update(x => { x.ui.salaryCompare = { ...(x.ui.salaryCompare || {}), [side]: e.target.value }; });
+        draw(); onChange?.();
+      },
+    }, ...FORMATS.map(f => h('option', { value: f.key, selected: f.key === value }, f.label + (f.key === cur ? ' (сейчас)' : ''))));
+    const col = (T, side) => h('div', { class: 'cmp-col ' + side },
       h('div', { class: 'kv' }, h('span', { class: 'k' }, `${RATE_LABELS[T.rate]}, к начислению`), h('span', { class: 'v' }, money(T.base.gross))),
       h('div', { class: 'kv' }, h('span', { class: 'k' }, `${RATE_LABELS[T.rate]}, на руки`), h('span', { class: 'v' }, money(T.base.net))),
       T.gph ? h('div', { class: 'kv' }, h('span', { class: 'k' }, `ГПХ после НДФЛ (${p.ndfl}%)`), h('span', { class: 'v' }, money(r.gphNet))) : null,
@@ -188,10 +196,10 @@ export function comparisonCard(r, p, { onChange } = {}) {
     const max = Math.max(...all.map(x => x.net)) || 1;
     card.replaceChildren(
       h('h3', {}, 'Сравнение форматов работы'),
-      h('div', { class: 'card-sub' }, 'Выберите, что с чем сравнить. Ниже — все шесть вариантов на одной шкале.'),
+      h('div', { class: 'card-sub' }, 'Выберите в списках, что с чем сравнить. Ниже — все шесть вариантов на одной шкале.'),
       h('div', { class: 'grid cols-2' },
-        h('div', {}, h('div', { class: 'muted', style: { fontSize: '12px', fontWeight: 700, marginBottom: '6px' } }, 'Формат A'), pick('a', a), col('', A, 'ok')),
-        h('div', {}, h('div', { class: 'muted', style: { fontSize: '12px', fontWeight: 700, marginBottom: '6px' } }, 'Формат B'), pick('b', b), col('', B, 'cyan'))),
+        h('div', {}, h('label', { class: 'field cmp-field' }, h('span', {}, 'Формат A'), pick('a', a)), col(A, 'a')),
+        h('div', {}, h('label', { class: 'field cmp-field' }, h('span', {}, 'Формат B'), pick('b', b)), col(B, 'b'))),
       h('hr', { class: 'sep' }),
       h('p', { style: { margin: '0 0 12px', fontSize: '14px' } },
         Math.abs(diff) < 0.5
@@ -340,7 +348,7 @@ function renderCalcTab(root) {
     /* --- ряд настроек начисления: формат работы + постоянные величины --- */
     const mine = myConstants(s);
     const changed = CONST_KEYS.some(([k]) => Number(s[k]) !== Number(mine[k]));
-    wrap.append(h('div', { class: 'grid cols-2', style: { marginBottom: '16px' } },
+    wrap.append(h('div', { class: 'grid cols-2', style: { marginBottom: '16px', alignItems: 'stretch' } },
       h('div', { class: 'card' },
         h('h3', {}, 'Формат работы'),
         h('div', { class: 'card-sub' }, 'Ставка, на которой вы оформлены, и договор ГПХ — от этого зависят расчёт, расчётный листок и отпускные.'),
@@ -378,8 +386,8 @@ function renderCalcTab(root) {
         h('div', { class: 'row' }, field('Оклад 1 ставки, ₽', 'base'), field('Доплата за интенсив, ₽', 'intensive')),
         h('div', { class: 'row', style: { marginTop: '10px' } },
           field('Надбавка за качество, ₽', 'quality'), s.hasGph ? field('Сумма ГПХ (начислено), ₽', 'gph') : null),
-        h('div', { class: 'row', style: { marginTop: '10px' } },
-          field('НДФЛ, %', 'ndfl'), field('Районный коэф., %', 'district'), field('Северная надбавка, %', 'north')),
+        h('p', { class: 'muted', style: { fontSize: '12px', margin: '10px 0 0' } },
+          `НДФЛ ${s.ndfl}%, районный коэффициент ${s.district}%, северная надбавка ${s.north}% — меняются в окне «Мои актуальные значения».`),
       ),
     ));
 
@@ -388,16 +396,33 @@ function renderCalcTab(root) {
     const { b: cmpB } = compareKeys(r);
     const B = formatTotals(r, p, cmpB);
     const gain = r.withGph - B.net;
+    const tones = s.tileColors || {};
+    const colorable = (key, def, node) => {
+      const tone = tones[key] ?? def;
+      const val = node.querySelector('.stat .value');
+      if (val) val.className = 'value ' + tone;
+      node.classList.add('tile-colorable');
+      node.title = node.title || 'Правая кнопка мыши — цвет цифр';
+      node.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        contextMenu(e.clientX, e.clientY, [
+          { title: 'Цвет цифр' },
+          { swatches: TILE_TONES.map(t => ({ ...t, active: t.value === tone })), onPick: (v) => { update(x => { x.salary.tileColors = { ...(x.salary.tileColors || {}), [key]: v }; }); redraw(); } },
+          tones[key] !== undefined ? 'sep' : null,
+          tones[key] !== undefined ? { label: 'Как было', icon: icon('reset', 16), onClick: () => { update(x => { const c = { ...(x.salary.tileColors || {}) }; delete c[key]; x.salary.tileColors = c; }); redraw(); } } : null,
+        ]);
+      });
+      return node;
+    };
     wrap.append(h('div', { class: 'grid cols-4 tiles-5', style: { marginBottom: '16px' } },
-      statCard(`${formatLabel} · на руки`, money0(r.withGph), 'ваш текущий формат', ''),
-      forecastTile(r.current, fullNet, redraw),
-      statCard(gain >= 0 ? 'Выгода текущего формата' : 'Проигрыш текущего формата',
+      colorable('current', '', statCard(`${formatLabel} · на руки`, money0(r.withGph), 'ваш текущий формат', '')),
+      colorable('forecast', '', forecastTile(r.current, fullNet, redraw)),
+      colorable('gain', gain >= 0 ? '' : 'magenta', statCard(gain >= 0 ? 'Выгода текущего формата' : 'Проигрыш текущего формата',
         (gain >= 0 ? '+' : '−') + money0(Math.abs(gain)),
-        `по сравнению с «${B.label}»`,
-        gain >= 0 ? '' : 'magenta'),
-      statCard(`${rateLabel} без НДФЛ`, money0(r.current.gross), `на руки ${money0(r.current.net)}`, 'plain'),
-      statCard('Стоимость одного РВ', '+' + money0(r.current.rvMarginalNet),
-        `на руки · до НДФЛ +${money0(r.current.rvMarginalGross)}`, 'amber'),
+        `по сравнению с «${B.label}»`, '')),
+      colorable('gross', 'plain', statCard(`${rateLabel} без НДФЛ`, money0(r.current.gross), `на руки ${money0(r.current.net)}`, 'plain')),
+      colorable('rv', 'amber', statCard('Стоимость одного РВ', '+' + money0(r.current.rvMarginalNet),
+        `на руки · до НДФЛ +${money0(r.current.rvMarginalGross)}`, 'amber')),
     ));
 
     /* --- ввод --- */

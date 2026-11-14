@@ -51,69 +51,149 @@ function rng(seed) {
   return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
+const mondayOf = (d) => { const dt = parse(d); dt.setDate(dt.getDate() - weekdayIdx(d)); return iso(dt); };
+
+/** Учебные дни, разбитые по неделям (пн–сб). */
+export function daysByWeek(days) {
+  const weeks = [];
+  for (const d of days) {
+    const m = mondayOf(d);
+    let w = weeks.find(x => x.monday === m);
+    if (!w) { w = { monday: m, days: [] }; weeks.push(w); }
+    w.days.push(d);
+  }
+  return weeks;
+}
+
+/**
+ * План группы по неделям: в каждой неделе — k занятий по s уроков (s = 2 или 3,
+ * в одной неделе размер один и тот же). Сумма = часам группы. Часы делятся
+ * между неделями пропорционально числу учебных дней.
+ * @returns {Array<{size, count}>|null}
+ */
+export function weekPlan(hours, weekLens, rnd = Math.random) {
+  const D = weekLens.reduce((a, b) => a + b, 0);
+  const opts = weekLens.map(n => {
+    const o = [{ size: 0, count: 0 }];
+    for (const size of [2, 3]) for (let count = 1; count <= n; count++) o.push({ size, count });
+    return o;
+  });
+  let best = null, bestScore = Infinity;
+  const pick = [];
+  const rec = (i, sum) => {
+    if (sum > hours) return;
+    if (i === opts.length) {
+      if (sum !== hours) return;
+      let score = 0;
+      pick.forEach((p, w) => {
+        const share = hours * weekLens[w] / D;
+        score += Math.abs(p.size * p.count - share);
+        if (!p.count && weekLens[w] >= 2) score += 3;           // неделя без занятий — плохо
+        if (p.count === weekLens[w] && weekLens[w] > 2) score += 0.8;   // каждый день подряд — тяжело
+      });
+      score += rnd() * 1.5;
+      if (score < bestScore) { bestScore = score; best = pick.map(p => ({ ...p })); }
+      return;
+    }
+    for (const o of opts[i]) { pick.push(o); rec(i + 1, sum + o.size * o.count); pick.pop(); }
+  };
+  rec(0, 0);
+  return best;
+}
+
+function combos(arr, k) {
+  const out = [];
+  const rec = (start, cur) => {
+    if (cur.length === k) { out.push([...cur]); return; }
+    for (let i = start; i < arr.length; i++) { cur.push(arr[i]); rec(i + 1, cur); cur.pop(); }
+  };
+  rec(0, []);
+  return out;
+}
+
+/** Одна попытка расстановки. */
+function attempt(days, groups, slotsPerDay, rnd) {
+  const weeks = daysByWeek(days);
+  const load = Object.fromEntries(days.map(d => [d, 0]));
+  const dayPlan = Object.fromEntries(days.map(d => [d, []]));
+  const placed = Object.fromEntries(groups.map(g => [g.code, 0]));
+  const problems = [];
+  let penalty = 0;
+
+  const plans = groups.filter(g => g.hours > 0).map(g => {
+    let plan = weekPlan(g.hours, weeks.map(w => w.days.length), rnd);
+    if (!plan) {
+      // ровно по неделям не делится (например, 5 ч в короткий заезд) — блоки как получится
+      problems.push(`${g.code}: ${g.hours} ч не делятся на недели блоками одного размера — проверьте вручную.`);
+      const blocks = splitBlocks(g.hours);
+      plan = weeks.map(() => ({ size: 0, count: 0, blocks: [] }));
+      blocks.forEach((b, i) => { const w = plan[i % plan.length]; w.blocks.push(b); });
+      plan.forEach(w => { w.count = w.blocks.length; });
+    }
+    return { g, plan };
+  });
+  // сначала группы с самыми «плотными» неделями
+  plans.sort((a, b) => (Math.max(...b.plan.map(p => p.count)) - Math.max(...a.plan.map(p => p.count))) || (rnd() - 0.5));
+
+  for (const { g, plan } of plans) {
+    plan.forEach((p, wi) => {
+      if (!p.count) return;
+      const wd = weeks[wi].days;
+      const sizes = p.blocks || Array(p.count).fill(p.size);
+      const k = Math.min(sizes.length, wd.length);
+      let best = null, bestScore = Infinity;
+      for (const set of combos(wd, k)) {
+        if (set.some((d, i) => load[d] + sizes[i] > slotsPerDay)) continue;
+        let score = set.reduce((a, d, i) => a + (load[d] + sizes[i]) ** 2, 0) / 10;
+        for (let i = 1; i < set.length; i++) if (days.indexOf(set[i]) - days.indexOf(set[i - 1]) === 1) score += 1.2;
+        score += rnd() * 0.6;
+        if (score < bestScore) { bestScore = score; best = set; }
+      }
+      if (!best) { problems.push(`${g.code}: в ${wi + 1}-й неделе не хватило места.`); penalty += 100; return; }
+      best.forEach((d, i) => { load[d] += sizes[i]; dayPlan[d].push({ code: g.code, size: sizes[i], isDo: !!g.isDo }); placed[g.code] += sizes[i]; });
+    });
+  }
+  const loads = Object.values(load);
+  penalty += Math.max(...loads) - Math.min(...loads) + problems.length * 50;
+  return { dayPlan, placed, problems, penalty };
+}
+
 /**
  * @param {{days:string[], groups:Array<{code, hours, isDo}>, slotsPerDay?:number, variant?:number}} o
  * @returns {{grid: Object<string, string[]>, placed: Object<string, number>, problems: string[]}}
  *   grid[date][slot] = код группы или ''.
+ *
+ * Правила: блоки по 2–3 урока подряд, у группы в неделю все блоки одного
+ * размера (либо по 2, либо по 3), не больше одного блока группы в день;
+ * у педагога в день нет «окон»: уроки идут подряд, школьные группы — с утра,
+ * группы ДО — следом; если в день только ДО — ближе к вечеру.
  */
 export function buildSchedule({ days, groups, slotsPerDay = 13, variant = 0 }) {
   const rnd = rng(variant + 1);
-  const D = days.length;
   const grid = Object.fromEntries(days.map(d => [d, Array(slotsPerDay).fill('')]));
-  const placed = Object.fromEntries(groups.map(g => [g.code, 0]));
-  const problems = [];
-  if (!D) return { grid, placed, problems: ['Нет учебных дней в выбранном периоде.'] };
+  if (!days.length) return { grid, placed: {}, problems: ['Нет учебных дней в выбранном периоде.'] };
 
-  // 1. блоки по группам; сначала те, у кого блоков больше (их сложнее разнести)
-  const items = groups.filter(g => g.hours > 0).map(g => ({ ...g, blocks: splitBlocks(g.hours) }));
-  for (const g of items) if (g.blocks.length > D) {
-    problems.push(`${g.code}: ${g.hours} ч не помещаются в ${D} дн. по 3 урока — поставлено сколько вышло.`);
-  }
-  const order = [...items].sort((a, b) => (b.blocks.length - a.blocks.length) || (rnd() - 0.5));
-
-  // 2. дни для каждого блока: равномерно по заезду + ровная нагрузка дней
-  const load = Object.fromEntries(days.map(d => [d, 0]));
-  const dayPlan = Object.fromEntries(days.map(d => [d, []]));   // [{code, size, isDo}]
-  for (const g of order) {
-    const k = Math.min(g.blocks.length, D);
-    const used = new Set();
-    const shift = rnd();
-    for (let i = 0; i < k; i++) {
-      const size = g.blocks[i];
-      const ideal = (i + shift * 0.9 + 0.05) * D / k;   // куда «просится» блок, чтобы блоки шли через равные промежутки
-      let best = null, bestScore = Infinity;
-      days.forEach((d, di) => {
-        if (used.has(d) || load[d] + size > slotsPerDay) return;
-        const near = [...used].some(u => Math.abs(days.indexOf(u) - di) === 1) ? 1.5 : 0;
-        const score = Math.abs(di + 0.5 - ideal) * 1.2 + load[d] * 0.9 + near + rnd() * 0.3;
-        if (score < bestScore) { bestScore = score; best = d; }
-      });
-      if (!best) { problems.push(`${g.code}: не хватило места для блока из ${size} ур.`); continue; }
-      used.add(best);
-      load[best] += size;
-      dayPlan[best].push({ code: g.code, size, isDo: !!g.isDo });
-      placed[g.code] += size;
-    }
+  let best = null;
+  for (let t = 0; t < 40; t++) {
+    const r = attempt(days, groups, slotsPerDay, rnd);
+    if (!best || r.penalty < best.penalty) best = r;
+    if (best.penalty <= 1) break;
   }
 
-  // 3. порядок внутри дня: школьные группы с первого урока, группы ДО — ближе к вечеру
-  const doStart = Math.min(8, slotsPerDay - 1);              // с 9-го урока (15:00)
+  const doStart = Math.min(8, slotsPerDay - 1);              // 9-й урок, 15:00
   for (const d of days) {
-    const school = dayPlan[d].filter(b => !b.isDo).sort(() => rnd() - 0.5);
-    const extra = dayPlan[d].filter(b => b.isDo).sort(() => rnd() - 0.5);
-    let pos = 0;
-    for (const b of school) { for (let j = 0; j < b.size; j++) grid[d][pos + j] = b.code; pos += b.size; }
-    const doTotal = extra.reduce((a, b) => a + b.size, 0);
-    let start = Math.max(pos, Math.min(doStart, slotsPerDay - doTotal));
-    for (const b of extra) { for (let j = 0; j < b.size; j++) grid[d][start + j] = b.code; start += b.size; }
+    const school = best.dayPlan[d].filter(b => !b.isDo).sort(() => rnd() - 0.5);
+    const extra = best.dayPlan[d].filter(b => b.isDo).sort(() => rnd() - 0.5);
+    const total = [...school, ...extra].reduce((a, b) => a + b.size, 0);
+    let pos = school.length ? 0 : Math.max(0, Math.min(doStart, slotsPerDay - total));
+    for (const b of [...school, ...extra]) { for (let j = 0; j < b.size; j++) grid[d][pos + j] = b.code; pos += b.size; }
   }
 
-  for (const g of items) {
-    if (placed[g.code] < g.hours && !problems.some(p => p.startsWith(g.code + ':'))) {
-      problems.push(`${g.code}: поставлено ${placed[g.code]} из ${g.hours} ч.`);
-    }
+  const problems = [...best.problems];
+  for (const g of groups) if (g.hours > 0 && best.placed[g.code] < g.hours && !problems.some(p => p.startsWith(g.code + ':'))) {
+    problems.push(`${g.code}: поставлено ${best.placed[g.code]} из ${g.hours} ч.`);
   }
-  return { grid, placed, problems };
+  return { grid, placed: best.placed, problems };
 }
 
 /** Сколько уроков каждой группы стоит в сетке (после ручной правки). */
@@ -123,17 +203,30 @@ export function countPlaced(grid) {
   return out;
 }
 
-/** Нарушения правил в сетке: больше 3 уроков группы в день, «одиночные» уроки. */
+/** Нарушения правил в сетке: больше 3 уроков группы в день, уроки не подряд,
+ *  разные размеры блоков у группы в одну неделю, «окна» у педагога. */
 export function checkGrid(grid) {
   const issues = [];
-  for (const [d, row] of Object.entries(grid)) {
+  const runsOf = (row) => {
     const per = {};
     row.forEach((c, i) => { if (c) (per[c] = per[c] || []).push(i); });
-    for (const [c, idx] of Object.entries(per)) {
+    return per;
+  };
+  for (const [d, row] of Object.entries(grid)) {
+    for (const [c, idx] of Object.entries(runsOf(row))) {
       if (idx.length > 3) issues.push({ date: d, code: c, text: `${c}: ${idx.length} уроков в день (больше 3)` });
-      const runs = [];
-      idx.forEach((v, i) => { if (i && v === idx[i - 1] + 1) runs[runs.length - 1]++; else runs.push(1); });
-      if (runs.length > 1) issues.push({ date: d, code: c, text: `${c}: уроки в этот день не подряд` });
+      if (idx[idx.length - 1] - idx[0] + 1 !== idx.length) issues.push({ date: d, code: c, text: `${c}: уроки в этот день не подряд` });
+    }
+    const filled = row.map((c, i) => (c ? i : -1)).filter(i => i >= 0);
+    if (filled.length && filled[filled.length - 1] - filled[0] + 1 !== filled.length) {
+      issues.push({ date: d, code: '', text: 'окно в расписании педагога' });
+    }
+  }
+  for (const w of daysByWeek(Object.keys(grid).sort())) {
+    const sizes = {};
+    for (const d of w.days) for (const [c, idx] of Object.entries(runsOf(grid[d]))) (sizes[c] = sizes[c] || new Set()).add(idx.length);
+    for (const [c, set] of Object.entries(sizes)) if (set.size > 1) {
+      issues.push({ date: w.days[0], code: c, text: `${c}: в одну неделю и по ${[...set].sort().join(', и по ')} урока — должно быть одинаково` });
     }
   }
   return issues;
