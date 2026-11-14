@@ -17,7 +17,9 @@ import { programsCard } from './ktp-panel.js';
 import { actualScheduleCard } from './actual-schedule-panel.js';
 import { go } from '../core/router.js';
 import { openFinishDialog, confirmReopen } from './agglomeration-finish.js';
+import { placeOfAgg } from '../data/places.js';
 
+const norm = (s) => String(s || '').toLowerCase();
 const dataOf = (st, kind) => (kind === 'actual' ? st.actual : st);
 const uiKeys = (kind) => (kind === 'actual'
   ? { subj: 'actualJournalSubject', grp: 'actualJournalGroup' }
@@ -96,6 +98,14 @@ function agglomerationSwitcher(st, redraw) {
       onClick: () => { switchViewedAgglomeration(agg.id); redraw(); },
     },
       h('span', {}, agg.name),
+      (() => {
+        const place = placeOfAgg(agg);
+        if (!place || norm(agg.name).includes(norm(place))) return null;
+        return /^агломерация\s*\d*$/i.test(agg.name.trim())
+          ? h('button', { class: 'btn sm ghost', title: 'Назвать агломерацию по месту', style: { padding: '2px 8px' },
+              onClick: (e) => { e.stopPropagation(); renameAgglomeration(agg.id, place); redraw(); } }, `назвать «${place}»`)
+          : h('span', { class: 'muted', style: { fontSize: '11.5px' } }, place);
+      })(),
       h('span', { class: 'muted mono', style: { fontSize: '11px' } }, `${n} чел.`),
       isActive ? h('span', { class: 'pill ok', style: { fontSize: '10.5px' } }, 'активна') : null,
       agg.completedAt ? h('span', { class: 'pill', style: { fontSize: '10.5px' }, title: `Завершена ${new Date(agg.completedAt).toLocaleDateString('ru-RU')}` }, '🔒 завершена') : null,

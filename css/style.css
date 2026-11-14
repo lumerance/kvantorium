@@ -692,7 +692,9 @@ input.box:checked::after{content:'✓';color:var(--on-accent);font-size:12px;fon
 /* ================= ЗАВЕРШЕНИЕ АГЛОМЕРАЦИИ ================= */
 .finish-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft)}
 .finish-row p{margin:0;flex:1 1 360px;font-size:12.5px}
-.finish-h{margin:18px 0 8px;font-size:13px;font-weight:700}
+.finish-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 8px;font-size:13px;font-weight:700}
+.finish-split{margin:0}
+.finish-split .tab{font-size:12px;padding:5px 11px}
 table.finish-table{table-layout:fixed}
 table.finish-table td{white-space:normal;vertical-align:top}
 table.finish-table tr.off td{opacity:.45}
