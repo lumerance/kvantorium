@@ -104,6 +104,22 @@ export function forecastCard(cur, fullNet, redraw) {
       h('span', { class: 'fc-hint' }, 'настроить ', icon('chevron', 14))));
 }
 
+/** Компактная плитка в ряду итогов на странице «Зарплата»; клик — настройка. */
+export function forecastTile(cur, fullNet, redraw) {
+  const st = getState();
+  const f = computeForecast(st, cur, fullNet);
+  return h('button', {
+    class: 'card stat-tile', type: 'button', title: 'Настроить начало и длительность отпуска',
+    onClick: () => openForecast(cur, fullNet, redraw),
+  },
+    h('span', { class: 'tile-corner' }, icon('plane', 16)),
+    h('div', { class: 'stat' },
+      h('div', { class: 'label' }, 'Прогноз отпускных'),
+      h('div', { class: 'value' }, money0(f.payout)),
+      h('div', { class: 'sub' }, `с ${dateRuLong(f.start)} · ${f.days} дн.`,
+        f.counts.missing ? h('span', { class: 'tile-warn', title: `Нет в истории: ${f.counts.missing} мес. — взяты как этот месяц` }, ` · ${f.counts.missing} мес. без истории`) : null)));
+}
+
 function openForecast(cur, fullNet, redraw) {
   const st = getState();
   const set = forecastSettings(st);
@@ -129,14 +145,14 @@ function openForecast(cur, fullNet, redraw) {
           h('td', { class: 'num mono' }, m.excluded || ''),
           h('td', { class: 'num mono' }, m.calcDays.toFixed(2))))))),
       f.counts.missing ? h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '10px 0 0' } },
-        '⚠ Для месяцев «нет в истории» сохраните их расчёт на этой странице (выберите месяц → «Сохранить расчёт») — прогноз станет точнее.') : null);
+        'Для месяцев «нет в истории» сохраните их расчёт на этой странице (выберите месяц → «Сохранить расчёт») — прогноз станет точнее.') : '');
   };
   startInput.addEventListener('input', render);
   daysInput.addEventListener('input', render);
   render();
 
   modal({
-    wide: true, title: '✈ Прогноз отпускных',
+    wide: true, title: [icon('plane', 16), 'Прогноз отпускных'],
     body: h('div', {},
       h('p', { class: 'muted', style: { marginTop: 0 } },
         'Сколько придёт отпускных, если зарплата и дальше будет как в рассчитываемом месяце. Прошлые месяцы берутся из «Истории зарплат», будущие — как этот месяц. Методика — как во вкладке «Отпускные» (12 месяцев до начала отпуска, 29,3 дня в месяце).'),

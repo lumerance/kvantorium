@@ -4,6 +4,7 @@
 // целиком. Хранится в той же форме, что и официальное (st.actual.schedules
 // [заезд] = {lessons, codes, teachers, dates, …}) — так весь остальной код
 // (сопоставление кодов, журнал) работает с ним одинаково, без разбора kind.
+import { icon } from '../core/icons.js';
 import { h, toast, confirmBox, dateRu } from '../core/ui.js';
 import { getState, update, autoMapAll, viewedAgg, activeAgg } from '../core/store.js';
 
@@ -99,7 +100,7 @@ export function actualScheduleCard(outerRedraw, readOnly) {
     const agg = viewedAgg(getState());
     if (readOnly) {
       wrap.append(h('div', { class: 'card', style: { marginBottom: '14px', padding: '12px 16px' } },
-        h('span', { class: 'muted' }, '🗄 Архивная агломерация — расписание по дням показано только для просмотра.')));
+        h('span', { class: 'muted' }, icon('archive', 16), 'Архивная агломерация — расписание по дням показано только для просмотра.')));
     } else {
       wrap.append(h('div', { class: 'card', style: { marginBottom: '14px' } }, formBody()));
     }
@@ -221,7 +222,7 @@ export function actualScheduleCard(outerRedraw, readOnly) {
         ...codes.map(c => h('button', { class: 'btn sm ghost', onClick: () => quickAdd(c) }, `+ ${c}`))) : null,
       draftTable,
       h('div', { style: { display: 'flex', gap: '8px', marginTop: '14px' } },
-        h('button', { class: 'btn primary', onClick: save }, '💾 Сохранить день'),
+        h('button', { class: 'btn primary', onClick: save }, icon('save', 16), 'Сохранить день'),
         draft.editKey || draft.lessons.length ? h('button', { class: 'btn ghost', onClick: () => { freshDraft(); render(); } }, 'Очистить') : null));
 
     /** Время следующего занятия этой группы — через 45 минут после её последнего;
@@ -255,7 +256,7 @@ export function actualScheduleCard(outerRedraw, readOnly) {
           render();
           wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-      }, '✎'),
+      }, icon('pen', 16)),
       readOnly ? null : h('button', {
         class: 'btn sm danger ghost', title: 'Удалить', onClick: (e) => {
           e.stopPropagation();
@@ -274,7 +275,7 @@ export function actualScheduleCard(outerRedraw, readOnly) {
             outerRedraw();  // «Сопоставление групп» ниже должно потерять пропавшие коды
           });
         }
-      }, '🗑'));
+      }, icon('trash', 16)));
     const body = isOpen ? h('div', { style: { padding: '0 14px 12px' } },
       h('div', { class: 'table-wrap' }, h('table', { class: 'compact' },
         h('thead', {}, h('tr', {}, h('th', {}, '№'), h('th', {}, 'Время'), h('th', {}, 'Группа'), h('th', {}, 'Направление'))),

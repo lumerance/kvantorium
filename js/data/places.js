@@ -49,3 +49,8 @@ export function planBlocks(plan) {
   }
   return blocks;
 }
+
+// тип населённого пункта для шапок документов
+const PLACE_KIND = { 'Новокиевский Увал': 'с.', 'Шимановск': 'г.', 'Талакан': 'пгт' };
+/** «Новокиевский Увал» -> «с. Новокиевский Увал», «Шимановск» -> «г. Шимановск». */
+export const placeTitle = (place) => (place ? `${PLACE_KIND[place] || 'с.'} ${place}` : '');

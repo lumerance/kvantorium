@@ -178,7 +178,7 @@ export function aggBadge(agg, readOnly) {
   // нужна только как предупреждение, что открыт архив (правка недоступна)
   if (!readOnly && !agg.completedAt) return null;
   return h('span', { class: 'pill warn', style: { marginLeft: '10px', verticalAlign: 'middle' } },
-    `🗄 ${agg.name} · ${readOnly ? 'архив' : 'завершена'}`);
+    `${agg.name} · ${readOnly ? 'архив' : 'завершена'}`);
 }
 
 /* ---------- сохранение фокуса при полной перерисовке (redraw) ---------- */
@@ -243,4 +243,13 @@ export function printElement(node) {
   printRoot.innerHTML = '';
   printRoot.appendChild(node);
   window.print();
+}
+
+/** Тумблер (role="switch"). onChange(nextValue). */
+export function switchToggle(on, label, onChange, { title } = {}) {
+  const btn = h('button', {
+    type: 'button', class: 'switch' + (on ? ' on' : ''), role: 'switch', 'aria-checked': String(!!on), title: title || label,
+    onClick: () => onChange(!on),
+  }, h('span', { class: 'switch-track' }, h('span', { class: 'switch-thumb' })), label ? h('span', { class: 'switch-label' }, label) : null);
+  return btn;
 }

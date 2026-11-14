@@ -11,6 +11,7 @@
 // сами отметки официального журнала.
 import { h, toast, dateRu, download, emptyState, WEEKDAY_SHORT, modal, aggBadge, moreMenu } from '../core/ui.js';
 import { icon } from '../core/icons.js';
+import { openVedomostDo } from './vedomost-do.js';
 import { getState, update, lessonsForGroup, lessonsForCode, lessonKey, activeAgg, viewedAgg, isViewingArchive } from '../core/store.js';
 import { ktpCard } from './ktp-panel.js';
 import { go } from '../core/router.js';
@@ -84,6 +85,7 @@ export function render(root, params = {}) {
   root.append(wrap);
   let brush = '✓';
   let randomCfg = null;   // { fives, fours } — заданное в модалке «Случайные оценки»
+  let pipetteBuf = null;  // { date, groupId, shift, cols: [{studentId: mark}] } — скопированный день
   let lastAction = null;  // { shift, groupId, label, undo() } — для кнопки «↩ Отменить»
 
   /** Снимок всех отметок группы за заезд — для отмены массовых действий
@@ -124,7 +126,7 @@ export function render(root, params = {}) {
     const enrollGroups = (isActual ? agg.actual.enroll : agg.enroll)?.groups || [];
     if (!realSubjects.length && !enrollGroups.length) {
       wrap.append(h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, `Электронный журнал · ${kindTitle}`), aggBadge(agg, readOnly))));
-      wrap.append(h('div', { class: 'card' }, emptyState('📋',
+      wrap.append(h('div', { class: 'card' }, emptyState(icon('list', 34),
         isActual
           ? 'Фактический список обучающихся ещё не загружен. Импортируйте свой docx со списком детей и docx с реальным расписанием — либо заведите класс на вкладке «Набор».'
           : 'Список обучающихся ещё не загружен. Импортируйте docx со списком детей и docx с расписанием — либо заведите группу дополнительного образования на вкладке «Набор».',
@@ -142,7 +144,7 @@ export function render(root, params = {}) {
 
     const sched = data.schedules[String(shift)];
     const lessons = subject.isEnroll ? lessonsForCode(shift, group.code, agg, kind) : lessonsForGroup(shift, group.id, agg, kind);
-    const canTransfer = !isActual && !subject.isEnroll && (agg.actual?.students?.subjects || []).length > 0;
+    const canTransfer = st.ui.showActualJournal && !isActual && !subject.isEnroll && (agg.actual?.students?.subjects || []).length > 0;
 
     wrap.append(h('div', { class: 'page-head' },
       h('div', {},
@@ -151,13 +153,14 @@ export function render(root, params = {}) {
           (sched ? ` · расписание ${shift} заезда: ${sched.lessons.length} занятий` : ' · расписание заезда не загружено'))),
       h('div', { class: 'head-actions' },
         (!readOnly && lastAction && lastAction.shift === shift && lastAction.groupId === group.id)
-          ? h('button', { class: 'btn danger ghost', title: `Отменить: ${lastAction.label}`, onClick: () => lastAction.undo() }, `↩ Отменить (${lastAction.label})`)
+          ? h('button', { class: 'btn danger ghost', title: `Отменить: ${lastAction.label}`, onClick: () => lastAction.undo() }, icon('undo', 16), `Отменить (${lastAction.label})`)
           : null,
-        readOnly ? null : h('button', { class: 'btn primary', onClick: () => markAllPresent(shift, group, lessons) }, '✓ Все присутствуют'),
+        readOnly ? null : h('button', { class: 'btn primary', onClick: () => markAllPresent(shift, group, lessons) }, icon('check', 16), 'Все присутствуют'),
         moreMenu([
           { title: 'Выгрузка' },
           { label: 'Экспорт журнала группы (CSV)', icon: icon('sheet', 16), onClick: () => exportJournal(data, subject, group, shift, lessons) },
           (subject.isEnroll || isActual) ? null : { label: 'Итоговая ведомость по предмету', icon: icon('documents', 16), onClick: () => openVedomost(subject) },
+          (subject.isEnroll && !isActual) ? { label: 'Ведомость групп ДО (Excel)', icon: icon('documents', 16), onClick: () => openVedomostDo() } : null,
           (!readOnly && canTransfer) ? 'sep' : null,
           (!readOnly && canTransfer) ? { label: 'Перенести оценки из Фактического', icon: icon('journalActual', 16), onClick: () => openTransferDialog(redraw) } : null,
           'sep',
@@ -187,7 +190,7 @@ export function render(root, params = {}) {
     /* --- панель отметок --- */
     wrap.append(readOnly
       ? h('div', { class: 'card', style: { marginBottom: '14px', padding: '12px 16px' } },
-          h('span', { class: 'muted' }, '🗄 Архивная агломерация — отметки только для просмотра, редактирование недоступно.'))
+          h('span', { class: 'muted' }, icon('archive', 16), 'Архивная агломерация — отметки только для просмотра, редактирование недоступно.'))
       : h('div', { class: 'card', style: { marginBottom: '14px', padding: '12px 16px' } },
       h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' } },
         h('span', { class: 'muted', style: { fontSize: '12.5px', fontWeight: '600' } }, 'Кисть:'),
@@ -199,18 +202,27 @@ export function render(root, params = {}) {
         h('button', {
           class: 'btn sm' + (brush === '' ? ' primary' : ''),
           onClick: () => { brush = ''; redraw(); }
-        }, '⌫ Стереть'),
+        }, icon('eraser', 16), 'Стереть'),
         h('button', {
           class: 'btn sm' + (brush === null ? ' primary' : ''),
           onClick: () => { brush = null; redraw(); }
-        }, '↻ Цикл по клику'),
+        }, icon('refresh', 16), 'Цикл по клику'),
+        h('button', {
+          class: 'btn sm' + (brush === 'pipette' ? ' primary' : ''),
+          title: 'Пипетка: клик по дате копирует все отметки этого дня, клик по другой дате — вставляет их',
+          onClick: () => { brush = 'pipette'; redraw(); },
+        }, icon('pipette', 16), 'Пипетка'),
+        (brush === 'pipette' && pipetteBuf && pipetteBuf.groupId === group.id && pipetteBuf.shift === shift)
+          ? h('span', { class: 'pill ok pipette-chip' }, `скопировано ${dateRu(pipetteBuf.date)}`,
+              h('button', { class: 'chip-x', title: 'Забыть скопированное', 'aria-label': 'Забыть скопированное', onClick: () => { pipetteBuf = null; redraw(); } }, icon('x', 13)))
+          : null,
         h('button', {
           class: 'btn sm' + (brush === 'random' ? ' primary' : ''),
           title: randomCfg ? `Случайные оценки: ${randomCfg.fives}×5, ${randomCfg.fours}×4 — клик настроить заново` : 'Случайные оценки',
           onClick: () => openRandomModal(group),
-        }, '🎲'),
+        }, icon('dice', 16)),
         h('div', { class: 'legend', style: { marginLeft: 'auto' } },
-          h('span', { class: 'k' }, h('i', { class: 'sw', style: { background: 'rgba(43,255,139,.3)' } }), '✓ был'),
+          h('span', { class: 'k' }, h('i', { class: 'sw', style: { background: 'rgba(43,255,139,.3)' } }), icon('check', 16), 'был'),
           h('span', { class: 'k' }, h('i', { class: 'sw', style: { background: 'rgba(125,149,163,.3)' } }), 'н — не был'),
           h('span', { class: 'k' }, h('i', { class: 'sw', style: { background: 'var(--red)' } }), '2'),
           h('span', { class: 'k' }, h('i', { class: 'sw', style: { background: 'var(--orange)' } }), '3'),
@@ -219,7 +231,7 @@ export function render(root, params = {}) {
         ))));
 
     if (!sched) {
-      wrap.append(h('div', { class: 'card' }, emptyState('🗓',
+      wrap.append(h('div', { class: 'card' }, emptyState(icon('calendar', 34),
         `Расписание ${shift} заезда не загружено.`,
         readOnly ? null : h('button', { class: 'btn primary', onClick: () => go('data', isActual ? { kind: 'actual' } : undefined) }, 'Загрузить расписание'))));
       return;
@@ -229,12 +241,12 @@ export function render(root, params = {}) {
         const msg = group.code
           ? `В расписании ${shift} заезда нет занятий с кодом «${group.code}».`
           : `Группа «${group.name}» не привязана к коду в расписании.`;
-        wrap.append(h('div', { class: 'card' }, emptyState('🔗', msg,
+        wrap.append(h('div', { class: 'card' }, emptyState(icon('link', 34), msg,
           readOnly ? null : h('button', { class: 'btn primary', onClick: () => go('enroll', isActual ? { kind: 'actual' } : undefined) }, 'Привязать код в «Наборе»'))));
         return;
       }
       const mapped = Object.entries(data.mapping).filter(([, m]) => m?.groupId === group.id).length;
-      wrap.append(h('div', { class: 'card' }, emptyState('🔗',
+      wrap.append(h('div', { class: 'card' }, emptyState(icon('link', 34),
         mapped ? `В расписании ${shift} заезда нет занятий для этой группы.`
                : `Группа «${group.name}» не сопоставлена ни с одним кодом расписания (например «Т1 РШ7»).`,
         readOnly ? null : h('button', { class: 'btn primary', onClick: () => go('data', isActual ? { kind: 'actual' } : undefined) }, 'Настроить сопоставление'))));
@@ -287,7 +299,48 @@ export function render(root, params = {}) {
       redraw();
     }
 
-    wrap.append(journalTable(data, subject, group, shift, lessons, setMark, redraw, () => brush, fillLessonRandom, readOnly));
+    /** Пипетка: первый клик по дате копирует отметки всех уроков этого дня,
+     *  следующие — вставляют их на выбранную дату (урок к уроку по порядку;
+     *  если в новом дне уроков больше — лишние получают отметки последнего). */
+    function pipetteDate(l) {
+      const dayOf = (date) => lessons.filter(x => x.date === date).sort((a, b) => a.no - b.no);
+      const jGroup = data.journal?.[shift]?.[group.id] || {};
+      const fresh = !pipetteBuf || pipetteBuf.groupId !== group.id || pipetteBuf.shift !== shift;
+      if (fresh || pipetteBuf.date === l.date) {
+        const day = dayOf(l.date);
+        const cols = day.map(x => Object.fromEntries(group.students.map(s => [s.id, jGroup[s.id]?.[lessonKey(x)] || ''])));
+        const filled = cols.reduce((n, c) => n + Object.values(c).filter(Boolean).length, 0);
+        if (!filled) { toast(`На ${dateRu(l.date)} нет отметок — копировать нечего`, 'err'); return; }
+        pipetteBuf = { date: l.date, groupId: group.id, shift, cols };
+        toast(`Скопированы отметки за ${dateRu(l.date)} (${day.length} ${day.length === 1 ? 'урок' : day.length < 5 ? 'урока' : 'уроков'}). Кликните по другой дате, чтобы вставить`);
+        redraw();
+        return;
+      }
+      const target = dayOf(l.date);
+      const before = snapshotGroupJournal(shift, group.id);
+      update(x => {
+        const j = journalRoot(activeAgg(x)).journal;
+        j[shift] = j[shift] || {}; j[shift][group.id] = j[shift][group.id] || {};
+        target.forEach((t, i) => {
+          const col = pipetteBuf.cols[Math.min(i, pipetteBuf.cols.length - 1)];
+          for (const s of group.students) {
+            const cell = j[shift][group.id][s.id] = j[shift][group.id][s.id] || {};
+            const m = col[s.id] || '';
+            if (m) cell[lessonKey(t)] = m; else delete cell[lessonKey(t)];
+          }
+        });
+      });
+      lastAction = {
+        shift, groupId: group.id, label: `вставка на ${dateRu(l.date)}`,
+        undo: () => { restoreGroupJournal(shift, group.id, before); lastAction = null; toast('Действие отменено'); redraw(); },
+      };
+      toast(`Отметки за ${dateRu(pipetteBuf.date)} вставлены на ${dateRu(l.date)}`);
+      redraw();
+    }
+
+    const onHeader = brush === 'random' ? fillLessonRandom : brush === 'pipette' ? pipetteDate : null;
+    const srcDate = (brush === 'pipette' && pipetteBuf && pipetteBuf.groupId === group.id && pipetteBuf.shift === shift) ? pipetteBuf.date : null;
+    wrap.append(journalTable(data, subject, group, shift, lessons, setMark, redraw, () => brush, onHeader, readOnly, srcDate));
   }
 
   /** Открывает ведомость, предварительно выбрав группы текущего предмета. */
@@ -339,7 +392,7 @@ export function render(root, params = {}) {
       const fours = Math.max(0, parseInt(foursInput.value, 10) || 0);
       const over = fives + fours > n;
       countHint.textContent = over
-        ? `⚠ В группе «${group.name}» всего ${n} чел. — указано ${fives + fours}, это больше.`
+        ? `Внимание: в группе «${group.name}» всего ${n} чел. — указано ${fives + fours}, это больше.`
         : `В группе «${group.name}» — ${n} чел.: ${fives}×5, ${fours}×4, оставшимся ${n - fives - fours} — случайно 3 или 2.`;
       countHint.style.color = over ? 'var(--red)' : '';
     };
@@ -347,7 +400,7 @@ export function render(root, params = {}) {
     foursInput.addEventListener('input', updateHint);
     updateHint();
     modal({
-      title: '🎲 Случайные оценки',
+      title: [icon('dice', 16), 'Случайные оценки'],
       body: h('div', {},
         h('p', { class: 'muted', style: { marginTop: 0 } },
           'Укажите, сколько пятёрок и четвёрок раздать — кому именно из группы, решит случайный выбор. После подтверждения кликните по шапке занятия (дате) в таблице — оценки появятся сразу на весь столбец; так можно раздать оценки на несколько занятий подряд, не открывая модалку заново. Кто на первом уроке дня отмечен «н» — оценку не получит, а «н» повторится и на этом занятии.'),
@@ -427,7 +480,7 @@ export function render(root, params = {}) {
       return h('tr', {},
         h('td', {}, cb),
         h('td', {}, m.official.student.short || m.official.student.fio,
-          m.ambiguous ? h('span', { class: 'pill warn', style: { marginLeft: '6px' } }, '⚠ неск. совпадений') : null),
+          m.ambiguous ? h('span', { class: 'pill warn', style: { marginLeft: '6px' } }, icon('alert', 16), 'неск. совпадений') : null),
         h('td', { class: 'muted', style: { fontSize: '12px' } }, `${m.official.subject.title} · ${m.official.group.name}`),
         h('td', { class: 'muted', style: { fontSize: '12px' } }, `${m.fact.subject.title} · ${m.fact.group.name}`),
         ...SHIFTS.map(sh => h('td', { class: 'num mono' }, m.rounded[sh] ?? '—')));
@@ -462,13 +515,16 @@ export function render(root, params = {}) {
   redraw();
 }
 
-function journalTable(data, subject, group, shift, lessons, setMark, redraw, getBrush, fillLessonRandom, readOnly) {
+function journalTable(data, subject, group, shift, lessons, setMark, redraw, getBrush, onHeader, readOnly, srcDate = null) {
   const jGroup = data.journal?.[shift]?.[group.id] || {};
   const isRandomMode = !readOnly && getBrush() === 'random';
+  const isPipette = !readOnly && getBrush() === 'pipette';
   const colHeaderProps = (l) => ({
-    class: 'num' + (isRandomMode ? ' col-random' : ''),
-    title: isRandomMode ? 'Клик — раздать случайные оценки на это занятие' : `${l.code} · ${l.time} · ${l.weekday}`,
-    onClick: isRandomMode ? () => fillLessonRandom(l) : undefined,
+    class: 'num' + ((isRandomMode || isPipette) ? ' col-random' : '') + (isPipette ? ' col-pipette' : '') + (srcDate === l.date ? ' col-src' : ''),
+    title: isRandomMode ? 'Клик — раздать случайные оценки на это занятие'
+      : isPipette ? (srcDate ? (srcDate === l.date ? 'Скопированный день' : `Клик — вставить отметки за ${dateRu(srcDate)} на этот день`) : 'Клик — скопировать отметки этого дня')
+      : `${l.code} · ${l.time} · ${l.weekday}`,
+    onClick: (!readOnly && onHeader) ? () => onHeader(l) : undefined,
   });
 
   const thead = h('thead', {},
@@ -518,13 +574,14 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
           btn.addEventListener('click', () => {
             const brush = getBrush();
             if (brush === 'random') { toast('В режиме случайных оценок кликните по шапке занятия (дате)', 'err'); return; }
+            if (brush === 'pipette') { toast('Пипеткой кликайте по дате в шапке таблицы', 'err'); return; }
             const cur = data.journal?.[shift]?.[group.id]?.[s.id]?.[k] || '';
             if (brush === null) apply(CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length]);
             else apply(cur === brush ? '' : brush);
           });
           btn.addEventListener('contextmenu', (e) => { e.preventDefault(); apply(''); });
         }
-        return h('td', { class: 'mark-cell' }, btn);
+        return h('td', { class: 'mark-cell' + (srcDate === l.date ? ' col-src' : '') }, btn);
       }),
       avgCell, avg3Cell,
     );
@@ -549,9 +606,13 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
     h('div', { class: 'table-wrap' }, h('table', {}, thead, tbody, footer)),
     h('p', { class: 'muted', style: { fontSize: '12px', marginTop: '8px' } },
       readOnly
-        ? '🗄 Архивная агломерация — отметки показаны только для просмотра, изменить их нельзя.'
+        ? [icon('archive', 16), 'Архивная агломерация — отметки показаны только для просмотра, изменить их нельзя.']
+        : isPipette
+          ? [icon('pipette', 16), srcDate
+              ? `Скопированы отметки за ${dateRu(srcDate)}. Клик по другой дате вставит их туда (урок к уроку). Скопировать другой день — снимите копию крестиком.`
+              : 'Пипетка: кликните по дате в шапке — скопируются отметки всех уроков этого дня.']
         : isRandomMode
-          ? '🎲 Режим случайных оценок: клик по шапке занятия (дате) раздаёт оценки всему столбцу. Отдельные клетки в этом режиме не редактируются — выберите другую кисть, чтобы вернуться к обычной простановке.'
+          ? [icon('dice', 16), 'Режим случайных оценок: клик по шапке занятия (дате) раздаёт оценки всему столбцу. Отдельные клетки в этом режиме не редактируются — выберите другую кисть, чтобы вернуться к обычной простановке.']
           : 'Клик по клетке ставит выбранную кисть (повторный клик той же отметкой — снимает), правая кнопка мыши — очистить. Средний балл считается только по оценкам 2–5.'));
 }
 

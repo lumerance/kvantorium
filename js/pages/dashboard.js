@@ -1,4 +1,5 @@
 // Обзорная страница: состояние импортов, ближайшие занятия, часы и зарплата одним взглядом.
+import { icon } from '../core/icons.js';
 import { h, statCard, hoursFmt, money0, dateRu, emptyState, WEEKDAY_SHORT, MONTHS, aggBadge } from '../core/ui.js';
 import { getState, lessonsForGroup, allGroups, viewedAgg, isViewingArchive } from '../core/store.js';
 import { computeHours } from './hours.js';
@@ -20,7 +21,7 @@ export function render(root) {
       h('h1', {}, 'Рабочий стол педагога', aggBadge(agg, readOnly)),
       h('p', {}, 'Журнал, часы по индивидуальному плану и расчёт зарплаты — в одном месте. Данные хранятся только в этом браузере.')),
     h('div', { class: 'head-actions' },
-      h('button', { class: 'btn primary', onClick: () => go('data') }, '⤒ Импорт документов'))));
+      h('button', { class: 'btn primary', onClick: () => go('data') }, icon('upload', 16), 'Импорт документов'))));
 
   const groups = allGroups(agg);
   const loadedShifts = SHIFTS.filter(sh => agg.schedules[String(sh)]);
@@ -109,7 +110,7 @@ function upcomingCard(st) {
               h('td', {}, l.code),
               h('td', { class: g ? '' : 'muted' }, g ? `${g.subject.title.split('(')[0].trim()} · ${g.group.name}` : 'не сопоставлено'));
           }))))
-    : emptyState('🗓', 'Ближайших занятий нет — загрузите расписание заездов.');
+    : emptyState(icon('calendar', 34), 'Ближайших занятий нет — загрузите расписание заездов.');
 
   return h('div', { class: 'card' },
     h('h3', {}, past && near.length ? 'Последние занятия по расписанию' : 'Ближайшие занятия'),

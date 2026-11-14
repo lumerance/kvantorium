@@ -2,6 +2,7 @@
 // 12 месяцев с суммой на руки. Клик по месяцу открывает модалку с полной
 // раскладкой (те же карточки, что и на вкладке расчёта), выгрузку в Word
 // и точную печатную копию официального расчётного листка (печать / PDF).
+import { icon } from '../core/icons.js';
 import { h, money0, toast, download, confirmBox, modal, MONTHS, emptyState, printElement } from '../core/ui.js';
 import { getState, update } from '../core/store.js';
 import { comparisonCard, detailTableCard, applyBonus, RATE_LABELS } from './salary.js';
@@ -32,8 +33,8 @@ export function render(root) {
 
     const years = [...new Set(s.history.map(h => h.year))].sort((a, b) => a - b);
     if (!years.length) {
-      wrap.append(h('div', { class: 'card' }, emptyState('📜',
-        'Пока ничего не сохранено. Посчитайте месяц на вкладке «Расчёт по месяцам» и нажмите «💾 Сохранить расчёт».',
+      wrap.append(h('div', { class: 'card' }, emptyState(icon('history', 34),
+        'Пока ничего не сохранено. Посчитайте месяц на вкладке «Расчёт по месяцам» и нажмите «Сохранить расчёт».',
         h('button', { class: 'btn primary', onClick: () => { update(x => { x.ui.salaryTab = 'calc'; }); go('salary'); } }, 'К расчёту зарплаты'))));
       return;
     }
@@ -106,7 +107,7 @@ export function render(root) {
       h('button', {
         class: 'btn primary',
         onClick: () => printElement(payslipPrintNode(entry, requisites)),
-      }, '🖨 Печать / PDF (как оригинал)'),
+      }, icon('printer', 16), 'Печать / PDF (как оригинал)'),
       h('button', {
         class: 'btn', onClick: async () => {
           try {
@@ -115,7 +116,7 @@ export function render(root) {
             toast('Расчётный листок выгружен');
           } catch (e) { console.error(e); toast('Ошибка выгрузки: ' + e.message, 'err'); }
         }
-      }, '⤓ Word (редактируемый)'),
+      }, icon('download', 16), 'Word (редактируемый)'),
       h('button', {
         class: 'btn', onClick: () => {
           update(x => {
@@ -124,14 +125,14 @@ export function render(root) {
           });
           go('salary');
         }
-      }, '✎ Открыть в расчёте'),
+      }, icon('pen', 16), 'Открыть в расчёте'),
       h('button', {
         class: 'btn danger ghost', onClick: () => confirmBox(`Удалить сохранённый расчёт за ${MONTHS[entry.month - 1]} ${entry.year}?`, () => {
           update(x => { x.salary.history = x.salary.history.filter(h => h.id !== entry.id); });
           document.querySelector('.modal-back')?.remove();
           toast('Запись удалена'); outerRedraw();
         })
-      }, '🗑 Удалить'),
+      }, icon('trash', 16), 'Удалить'),
     ));
 
     modal({ wide: true, title: `${MONTHS[entry.month - 1]} ${entry.year}`, body, okText: null, cancelText: 'Закрыть' });
@@ -167,12 +168,12 @@ function bonusCard(entry, outerRedraw, openMonth) {
   };
 
   return h('div', { class: 'card', style: { marginBottom: '16px' } },
-    h('h3', {}, '💰 Премия / разовая доплата', h('span', { class: 'hint' }, ' — не входит в формулу расчёта')),
+    h('h3', {}, icon('gift', 16), 'Премия / разовая доплата', h('span', { class: 'hint' }, ' — не входит в формулу расчёта')),
     h('div', { class: 'card-sub' }, 'Прибавляется к начислению этого месяца и облагается тем же НДФЛ — учитывается в сумме «на руки», сравнении форматов, расчётном листке и на вкладке «Отпускные».'),
     h('div', { class: 'row' },
       h('label', { class: 'field' }, h('span', {}, 'Сумма премии, ₽'), amountInput),
       h('label', { class: 'field' }, h('span', {}, 'Комментарий'), noteInput),
-      h('button', { class: 'btn primary fixed', onClick: save }, '💾 Сохранить')),
+      h('button', { class: 'btn primary fixed', onClick: save }, icon('save', 16), 'Сохранить')),
     bonus.amount ? h('p', { class: 'muted', style: { fontSize: '12.5px', marginTop: '10px', marginBottom: 0 } },
       `Сейчас учтено: +${money0(bonus.amount)} (${money0(bonus.amount * (1 - entry.params.ndfl / 100))} на руки после НДФЛ).`) : null);
 }

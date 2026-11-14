@@ -12,6 +12,7 @@
 // месяц (включая сами отпускные), результат линейно совпадает с тем, что
 // получится, если официально считать по зарплате до налога, а затем
 // удержать 13% с отпускных: и то и другое — просто X × 0,87.
+import { icon } from '../core/icons.js';
 import { h, money0, toast, download, confirmBox, MONTHS, captureFocus, restoreFocus } from '../core/ui.js';
 import { getState, update } from '../core/store.js';
 
@@ -129,7 +130,7 @@ export function render(root) {
         h('h3', {}, 'Быстрое заполнение'),
         h('div', { class: 'card-sub' }, 'Подставит суммы «1 ставка на руки» из сохранённых расчётов зарплаты (вкладка «Расчёт по месяцам») для месяцев, которые совпадают по году и месяцу.'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          h('button', { class: 'btn sm', onClick: () => fillFromHistory(period, redraw) }, '⚡ Заполнить из истории зарплаты'),
+          h('button', { class: 'btn sm', onClick: () => fillFromHistory(period, redraw) }, icon('zap', 16), 'Заполнить из истории зарплаты'),
           h('button', { class: 'btn sm danger ghost', onClick: () => confirmBox('Очистить все 12 введённых сумм?', () => { update(x => { x.vacation.months = {}; }); redraw(); }) }, 'Очистить месяцы'),
         )),
     ));
@@ -174,8 +175,8 @@ export function render(root) {
 
     /* --- действия --- */
     wrap.append(h('div', { style: { display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' } },
-      h('button', { class: 'btn primary', onClick: () => { saveHistory(v, calc, payout); redraw(); } }, '💾 Сохранить расчёт'),
-      h('button', { class: 'btn', onClick: () => exportCsv(v, calc, payout) }, '⤓ CSV'),
+      h('button', { class: 'btn primary', onClick: () => { saveHistory(v, calc, payout); redraw(); } }, icon('save', 16), 'Сохранить расчёт'),
+      h('button', { class: 'btn', onClick: () => exportCsv(v, calc, payout) }, icon('download', 16), 'CSV'),
     ));
 
     /* --- история --- */

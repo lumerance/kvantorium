@@ -1,4 +1,5 @@
 // Страница «Итоговая ведомость»: выбор групп, автооценки по заездам, ручная правка, Word и печать.
+import { icon } from '../core/icons.js';
 import { h, toast, download, emptyState, aggBadge } from '../core/ui.js';
 import { getState, update, allGroups, viewedAgg, activeAgg, isViewingArchive } from '../core/store.js';
 import { go } from '../core/router.js';
@@ -40,7 +41,7 @@ export function render(root) {
 
     if (!agg.students?.subjects?.length) {
       wrap.append(h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Итоговая ведомость', aggBadge(agg, readOnly)))));
-      wrap.append(h('div', { class: 'card' }, emptyState('📋', 'Сначала импортируйте список обучающихся.',
+      wrap.append(h('div', { class: 'card' }, emptyState(icon('list', 34), 'Сначала импортируйте список обучающихся.',
         readOnly ? null : h('button', { class: 'btn primary', onClick: () => go('data') }, 'Перейти к импорту'))));
       return;
     }
@@ -54,16 +55,16 @@ export function render(root) {
         h('h1', {}, 'Итоговая ведомость', aggBadge(agg, readOnly)),
         h('p', {}, 'Оценка за заезд — округлённый средний балл из журнала; «н/а», если оценок за заезд нет. Любую ячейку можно поправить вручную.')),
       h('div', { class: 'head-actions' },
-        h('button', { class: 'btn ghost', onClick: () => go('documents') }, '← Документы'),
-        h('button', { class: 'btn', onClick: () => window.print() }, '🖨 Печать'),
-        h('button', { class: 'btn primary', onClick: () => exportDocx(hd, sections) }, '⤓ Скачать Word'),
+        h('button', { class: 'btn ghost', onClick: () => go('documents') }, icon('arrowLeft', 16), 'Документы'),
+        h('button', { class: 'btn', onClick: () => window.print() }, icon('printer', 16), 'Печать'),
+        h('button', { class: 'btn primary', onClick: () => exportDocx(hd, sections) }, icon('download', 16), 'Скачать Word'),
       )));
 
     wrap.append(headerCard(hd, redraw, readOnly));
     wrap.append(groupsCard(agg, redraw, readOnly));
 
     if (!sections.length) {
-      wrap.append(h('div', { class: 'card' }, emptyState('👥', 'Выберите группы, которые войдут в ведомость.')));
+      wrap.append(h('div', { class: 'card' }, emptyState(icon('users', 34), 'Выберите группы, которые войдут в ведомость.')));
       return;
     }
     wrap.append(previewCard(hd, sections, redraw, readOnly));
@@ -104,7 +105,7 @@ function headerCard(hd, redraw, readOnly) {
         fld('Агломерация (населённый пункт)', 'place'),
         fld('Период (например 24.02.2026 - 30.04.2026)', 'period')),
       readOnly ? null : h('div', { style: { marginTop: '12px' } },
-        h('button', { class: 'btn sm', onClick: () => { update(x => { activeAgg(x).vedomostHeader = {}; }); redraw(); } }, '↺ Вернуть значения по умолчанию'))));
+        h('button', { class: 'btn sm', onClick: () => { update(x => { activeAgg(x).vedomostHeader = {}; }); redraw(); } }, icon('reset', 16), 'Вернуть значения по умолчанию'))));
 }
 
 function groupsCard(agg, redraw, readOnly) {

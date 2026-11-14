@@ -105,6 +105,7 @@ export const DEFAULTS = {
   ui: {
     journalShift: 1, journalSubject: null, journalGroup: null, salaryTab: 'calc',
     actualJournalShift: 1, actualJournalSubject: null, actualJournalGroup: null,
+    showActualJournal: false,       // вкладка «Фактический журнал» (включается в «Данных»)
     viewingAgglomerationId: null,   // null = смотрим активную; иначе — архивную (только чтение)
   },
 };

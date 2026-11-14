@@ -152,6 +152,17 @@ export function initShell() {
   renderAgg();
   subscribe(renderAgg);
 
+  // «Фактический журнал» — по тумблеру на странице «Данные»
+  const actualLink = links.get('journal-actual');
+  const syncActual = () => {
+    const show = !!getState().ui.showActualJournal;
+    if (actualLink.hidden === !show) return;
+    actualLink.hidden = !show;
+    movePill(links.get(activeKey), true);
+  };
+  syncActual();
+  subscribe(syncActual);
+
   window.addEventListener('routechange', (e) => {
     const { key, crumbs: list } = locate(e.detail.name, e.detail.params);
     activeKey = key;

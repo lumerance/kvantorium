@@ -24,7 +24,7 @@ export function initThemeToggle(btn, renderIcon) {
   if (!btn) return;
   const render = () => {
     const t = current();
-    if (renderIcon) renderIcon(t); else btn.textContent = t === 'light' ? '🌙' : '☀️';
+    if (renderIcon) renderIcon(t); else btn.textContent = t === 'light' ? 'Тёмная' : 'Светлая';
     btn.title = t === 'light' ? 'Тёмная тема' : 'Светлая тема';
   };
   render();

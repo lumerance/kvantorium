@@ -161,8 +161,8 @@ export function render(root, params = {}) {
       )));
 
     wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
-      h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, '📋 Официальный (ДО)'),
-      h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, '📝 Фактический (классы)')));
+      h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, icon('list', 16), 'Официальный (ДО)'),
+      h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, icon('pen', 16), 'Фактический (классы)')));
 
     if (groupsOf(agg, kind).length) wrap.append(searchCard(kind, searchQuery, (v) => { searchQuery = v; redrawAndReveal(); }));
 
@@ -170,16 +170,16 @@ export function render(root, params = {}) {
     wrap.append(totalsBox);
     if (readOnly) {
       wrap.append(h('div', { class: 'card', style: { marginBottom: '16px', padding: '12px 16px' } },
-        h('span', { class: 'muted' }, '🗄 Архивная агломерация — состав групп показан только для просмотра.')));
+        h('span', { class: 'muted' }, icon('archive', 16), 'Архивная агломерация — состав групп показан только для просмотра.')));
     } else {
       wrap.append(addCard(agg, redraw, kind, isDO, onGroupCreated));
     }
 
     if (!groupsOf(agg, kind).length) {
-      wrap.append(h('div', { class: 'card' }, emptyState('👥',
+      wrap.append(h('div', { class: 'card' }, emptyState(icon('users', 34),
         isDO ? 'Пока ни одной группы. Заведите её сверху — вручную или одним кликом из кода расписания.'
              : 'Пока ни одного класса. Заведите его сверху — вручную или одним кликом из кода расписания.',
-        (readOnly || scheduleCodes(agg, kind).length) ? null : h('button', { class: 'btn primary', onClick: () => go('data', kind === 'actual' ? { kind: 'actual' } : undefined) }, 'Загрузить расписание →'))));
+        (readOnly || scheduleCodes(agg, kind).length) ? null : h('button', { class: 'btn primary', onClick: () => go('data', kind === 'actual' ? { kind: 'actual' } : undefined) }, 'Загрузить расписание', icon('arrowRight', 16)))));
       return;
     }
 
@@ -276,9 +276,9 @@ function searchCard(kind, query, onChange) {
     : null;
   return h('div', { class: 'card', style: { marginBottom: '16px' } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
-      h('label', { class: 'field', style: { flex: '1 1 240px' } }, h('span', {}, '🔍 Поиск ребёнка по фамилии'), input),
+      h('label', { class: 'field', style: { flex: '1 1 240px' } }, h('span', {}, icon('search', 16), 'Поиск ребёнка по фамилии'), input),
       hint,
-      query ? h('button', { class: 'btn sm ghost', onClick: () => onChange('') }, '✕ Сбросить') : null));
+      query ? h('button', { class: 'btn sm ghost', onClick: () => onChange('') }, icon('x', 16), 'Сбросить') : null));
 }
 
 /* ---------------- создание групп ---------------- */
@@ -346,7 +346,7 @@ function codeRow(g, st, refresh, kind, readOnly) {
   return h('div', {
     style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '8px 0 4px', fontSize: '12.5px' },
   },
-    h('span', { class: 'muted' }, '📅 Код в расписании:'),
+    h('span', { class: 'muted' }, icon('calendar', 16), 'Код в расписании:'),
     (codes.length && !readOnly)
       ? h('select', {
         class: 'mono', style: { width: 'auto' },
@@ -360,7 +360,7 @@ function codeRow(g, st, refresh, kind, readOnly) {
         ...codes.map(c => h('option', { value: c, selected: g.code === c }, c)))
       : h('span', { class: 'muted' }, g.code || '— не привязан —'),
     g.code ? h('span', { class: 'muted' }, `· ${n} занятий во всех заездах`) : null,
-    h('button', { class: 'btn sm ghost', onClick: () => openInJournal(g.id, kind) }, '📋 Открыть в журнале'));
+    h('button', { class: 'btn sm ghost', onClick: () => openInJournal(g.id, kind) }, icon('list', 16), 'Открыть в журнале'));
 }
 
 /* ---------------- карточка группы: свёрнута по умолчанию, раскрывается по клику ---------------- */
@@ -473,8 +473,8 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
     h('h3', { style: { margin: 0 } }, h('span', { class: 'mono' }, g.name)),
     sizePill, contractPill, navPill,
     h('span', { style: { flex: '1 1 auto' } }),
-    readOnly ? null : h('button', { class: 'btn sm ghost', onClick: stop(() => renameDialog(g, reload, kind, isDO)) }, '✎ Переименовать'),
-    h('button', { class: 'btn sm ghost', onClick: stop(() => printElement(printNode([findGroup(g.id, viewedAgg(getState()), kind) || g], isDO))) }, '🖨 Печать'),
+    readOnly ? null : h('button', { class: 'btn sm ghost', onClick: stop(() => renameDialog(g, reload, kind, isDO)) }, icon('pen', 16), 'Переименовать'),
+    h('button', { class: 'btn sm ghost', onClick: stop(() => printElement(printNode([findGroup(g.id, viewedAgg(getState()), kind) || g], isDO))) }, icon('printer', 16), 'Печать'),
     readOnly ? null : h('button', {
       class: 'btn sm danger ghost',
       onClick: stop(() => confirmBox(`Удалить ${isDO ? 'группу' : 'класс'} «${g.name}»${g.students.length ? ` вместе со списком (${g.students.length} чел.)` : ''}?`, () => {
@@ -482,7 +482,7 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
         toast(`${isDO ? 'Группа' : 'Класс'} удалён${isDO ? 'а' : ''}`);
         reload();
       }))
-    }, '🗑'));
+    }, icon('trash', 16)));
 
   const body = isOpen ? h('div', { style: { marginTop: '10px' } },
     g.program ? h('div', { class: 'card-sub', style: { marginTop: 0 } }, g.program) : null,

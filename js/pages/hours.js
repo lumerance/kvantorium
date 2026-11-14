@@ -104,7 +104,7 @@ export function render(root) {
               update(x => { x.hoursSettings.annualNorm = total; }); redraw();
               toast(`Норма взята из плана: ${total} ч`);
             }
-          }, `↺ Из плана (${Math.round(st.plan?.totals.all || 0)} ч)`) : null,
+          }, icon('reset', 16), `Из плана (${Math.round(st.plan?.totals.all || 0)} ч)`) : null,
         ),
         h('div', { class: 'legend', style: { marginTop: '12px' } },
           h('span', { class: 'k' }, h('b', {}, hoursFmt(c.target.teaching)), ' учебных'),
@@ -209,7 +209,7 @@ function worksTable(c, redraw) {
 function logTable(st, redraw) {
   if (!st.hoursLog.length) {
     return h('div', { class: 'card' }, h('h3', {}, 'Журнал списаний'),
-      emptyState('🕓', 'Пока ничего не списано. Нажмите «Списать часы» или используйте быстрые кнопки.'));
+      emptyState(icon('hours', 34), 'Пока ничего не списано. Нажмите «Списать часы» или используйте быстрые кнопки.'));
   }
   const sorted = [...st.hoursLog].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.id - a.id);
   return h('div', { class: 'card' },
@@ -265,7 +265,7 @@ function addEntryDialog(redraw, preset = {}) {
   const works = worksCatalog(st);
   const sel = h('select', {}, ...works.map(w => h('option', {
     value: w.id, selected: preset.workId === w.id,
-  }, `${w.kind === 'teaching' ? '📘' : '🧩'} ${w.category ? w.category + ' · ' : ''}${w.title}${w.planned ? ` (план ${w.planned} ч)` : ''}`)));
+  }, `${w.kind === 'teaching' ? 'Учебн.' : 'Метод.'} · ${w.category ? w.category + ' · ' : ''}${w.title}${w.planned ? ` (план ${w.planned} ч)` : ''}`)));
   const hoursInput = h('input', { type: 'number', step: '0.5', min: '0', value: preset.hours ?? 1 });
   const dateInput = h('input', { type: 'date', value: new Date().toISOString().slice(0, 10) });
   const noteInput = h('input', { type: 'text', placeholder: 'комментарий (необязательно)' });

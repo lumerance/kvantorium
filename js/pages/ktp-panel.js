@@ -4,6 +4,7 @@
 // описания, а занятий в этот день может быть три подряд. Здесь по КТП и
 // официальному расписанию сразу собирается готовый текст на весь день —
 // остаётся нажать «скопировать» и вставить.
+import { icon } from '../core/icons.js';
 import { h, toast, modal, confirmBox, fileDrop, copyText, dateRu } from '../core/ui.js';
 import { getState, update, allGroups, activeAgg, viewedAgg } from '../core/store.js';
 import {
@@ -39,11 +40,11 @@ export function ktpCard(st, group, shift, lessons, redraw, readOnly) {
   const program = programOf(st, group.id);
   if (!program) {
     return h('details', { class: 'acc no-print', style: { marginBottom: '14px' } },
-      h('summary', {}, '📚 Темы по КТП'),
+      h('summary', {}, icon('book', 16), 'Темы по КТП'),
       h('div', { class: 'acc-body' },
         h('p', { class: 'muted', style: { margin: '0 0 12px', fontSize: '13px' } },
           `К группе «${group.name}» не привязана учебная программа. Загрузите КТП на странице «Данные» и отметьте там эту группу — темы, содержание и тип занятия сами разложатся по дням заезда, с кнопками «скопировать» для электронного журнала.`),
-        h('button', { class: 'btn sm', onClick: () => go('data') }, 'Загрузить программу →')));
+        h('button', { class: 'btn sm', onClick: () => go('data') }, 'Загрузить программу', icon('arrowRight', 16))));
   }
 
   const slots = slotsForShift(program, shift);
@@ -91,13 +92,13 @@ export function ktpCard(st, group, shift, lessons, redraw, readOnly) {
   const missing = Math.max(0, lessons.length - Math.max(0, slots.length - offset));
   const leftover = Math.max(0, slots.length - offset - lessons.length);
   if (missing) body.append(h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '4px 0 0' } },
-    `⚠ На ${missing === 1 ? 'последнее' : 'последние'} ${missing} ${plural(missing, 'занятие', 'занятия', 'занятий')} часов КТП в этом заезде не осталось — проверьте деление программы по заездам или сдвиг.`));
+    `Внимание: на ${missing === 1 ? 'последнее' : 'последние'} ${missing} ${plural(missing, 'занятие', 'занятия', 'занятий')} часов КТП в этом заезде не осталось — проверьте деление программы по заездам или сдвиг.`));
   else if (leftover) body.append(h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '4px 0 0' } },
     `Осталось нераспределённых часов КТП в этом заезде: ${leftover}.`));
 
   // свёрнуто по умолчанию — раскрывается по клику, если тема нужна прямо сейчас
   return h('details', { class: 'acc no-print', style: { marginBottom: '14px' } },
-    h('summary', {}, '📚 Темы по КТП — по дням, для электронного журнала'),
+    h('summary', {}, icon('book', 16), 'Темы по КТП — по дням, для электронного журнала'),
     body);
 }
 
@@ -175,7 +176,7 @@ export function programsCard(agg, redraw, readOnly) {
     body.append(h('div', { class: 'card-sub', style: { marginTop: 0 } },
       'Программа с КТП привязывается к группам: дальше в журнале на каждый день заезда сразу будет готовый текст темы, типа и описания занятия — с кнопкой «скопировать» в электронный журнал.'));
   }
-  for (const p of programs) body.append(programBlock(p, agg, redraw, readOnly));
+  if (programs.length) body.append(h('div', { class: 'prog-grid' }, ...programs.map(p => programBlock(p, agg, redraw, readOnly))));
 
   if (!readOnly) {
     body.append(fileDrop({
@@ -199,7 +200,7 @@ export function programsCard(agg, redraw, readOnly) {
     }));
 
     body.append(h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' } },
-      h('button', { class: 'btn sm', onClick: () => pasteModal(redraw) }, '⤒ Вставить КТП таблицей (из Word, Excel)')));
+      h('button', { class: 'btn sm', onClick: () => pasteModal(redraw) }, icon('upload', 16), 'Вставить КТП таблицей (из Word, Excel)')));
     body.append(h('p', { class: 'muted', style: { fontSize: '12px', margin: '10px 0 0' } },
       'PDF читается напрямую, если он сохранён из Word или другого редактора, а таблица КТП нарисована с рамками. Скан (фото страниц) не распознаётся — для него загрузите сам .docx программы.'));
   }
@@ -234,38 +235,40 @@ function programBlock(program, agg, redraw, readOnly) {
     },
   });
 
-  return h('div', { class: 'card', style: { marginBottom: '12px', background: 'rgba(255,255,255,.015)' } },
-    h('div', { class: 'row' },
-      h('label', { class: 'field' }, h('span', {}, 'Название программы'),
-        h('input', { type: 'text', value: program.name, disabled: readOnly, onChange: (e) => { setField({ name: norm(e.target.value) || 'Учебная программа' }); redraw(); } })),
-      h('div', { class: 'fixed', style: { display: 'flex', gap: '8px', alignItems: 'flex-end' } },
-        h('button', { class: 'btn sm', onClick: () => ktpModal(program, redraw, readOnly) }, '📋 Показать КТП'),
-        readOnly ? null : h('button', { class: 'btn sm', onClick: () => assignModal(program, redraw) }, `🔗 Группы (${assigned.length})`),
-        readOnly ? null : h('button', {
-          class: 'btn sm danger ghost',
-          onClick: () => confirmBox(`Удалить программу «${program.name}»? Привязки групп к ней тоже пропадут.`, () => {
-            update(x => {
-              const a = activeAgg(x);
-              a.programs = (a.programs || []).filter(y => y.id !== program.id);
-              for (const [gid, pid] of Object.entries(a.groupPrograms || {})) if (pid === program.id) delete a.groupPrograms[gid];
-            });
-            toast('Программа удалена'); redraw();
-          })
-        }, '🗑'))),
+  const del = () => confirmBox(`Удалить программу «${program.name}»? Привязки групп к ней тоже пропадут.`, () => {
+    update(x => {
+      const a = activeAgg(x);
+      a.programs = (a.programs || []).filter(y => y.id !== program.id);
+      for (const [gid, pid] of Object.entries(a.groupPrograms || {})) if (pid === program.id) delete a.groupPrograms[gid];
+    });
+    toast('Программа удалена'); redraw();
+  });
 
-    h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginTop: '12px' } },
-      h('span', { class: 'muted', style: { fontSize: '12.5px' } }, 'Часы по заездам:'),
+  return h('div', { class: 'prog-card' },
+    h('div', { class: 'prog-top' },
+      h('input', {
+        class: 'prog-name', type: 'text', value: program.name, disabled: readOnly, title: 'Название программы — можно изменить',
+        'aria-label': 'Название программы', onChange: (e) => { setField({ name: norm(e.target.value) || 'Учебная программа' }); redraw(); },
+      }),
+      readOnly ? null : h('button', { class: 'btn sm ghost icon-btn danger', title: 'Удалить программу', 'aria-label': 'Удалить программу', onClick: del }, icon('trash', 16))),
+    h('p', { class: 'prog-meta' },
+      `${program.rows.length} строк КТП · ${total} ч · ${program.sourceName || 'вставлено вручную'}`),
+
+    h('div', { class: 'prog-split' },
+      h('span', { class: 'muted' }, 'По заездам'),
       shiftInput(0), h('span', { class: 'muted' }, '+'), shiftInput(1), h('span', { class: 'muted' }, '+'), shiftInput(2),
-      h('span', { class: splitSum === total ? 'pill ok' : 'pill warn' },
-        splitSum === total ? `= ${total} ч, как в КТП` : `= ${splitSum} ч, а в КТП ${total} ч`),
-      readOnly ? null : h('button', { class: 'btn sm ghost', onClick: () => { setField({ shiftHours: defaultShiftHours(total) }); redraw(); } }, '↺ Как обычно'),
-    ),
-    h('p', { class: 'muted', style: { fontSize: '12px', margin: '8px 0 0' } },
-      `${program.rows.length} строк КТП · ${total} ч · файл: ${program.sourceName || 'вставлено вручную'}`),
+      h('span', { class: splitSum === total ? 'pill ok' : 'pill warn', title: splitSum === total ? 'Сумма совпадает с КТП' : `В КТП ${total} ч` },
+        splitSum === total ? `= ${total} ч` : `= ${splitSum} из ${total} ч`),
+      (readOnly || JSON.stringify(split) === JSON.stringify(defaultShiftHours(total))) ? null
+        : h('button', { class: 'btn sm ghost icon-btn', title: 'Вернуть обычное деление', 'aria-label': 'Вернуть обычное деление', onClick: () => { setField({ shiftHours: defaultShiftHours(total) }); redraw(); } }, icon('reset', 16))),
+
     assigned.length
-      ? h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px' } },
-        ...assigned.map(gid => h('span', { class: 'pill ok' }, groupLabel(gid))))
-      : h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '10px 0 0' } }, '⚠ Программа ещё не привязана ни к одной группе — в журнале темы не появятся.'));
+      ? h('div', { class: 'prog-groups' }, ...assigned.map(gid => h('span', { class: 'pill ok' }, groupLabel(gid))))
+      : h('p', { class: 'prog-warn' }, icon('alert', 15), 'Не привязана ни к одной группе — в журнале темы не появятся.'),
+
+    h('div', { class: 'prog-actions' },
+      h('button', { class: 'btn sm', onClick: () => ktpModal(program, redraw, readOnly) }, icon('list', 16), 'Показать КТП'),
+      readOnly ? null : h('button', { class: 'btn sm', onClick: () => assignModal(program, redraw) }, icon('link', 16), `Группы (${assigned.length})`)));
 }
 
 /* ---------- привязка к группам ---------- */
@@ -452,7 +455,7 @@ function pasteModal(redraw) {
           if (!skipFirst) map = { theme: 1, content: 2, type: 3, hours: 4, no: 0 };
           renderPreview();
         }
-      }, '🔍 Разобрать')),
+      }, icon('search', 16), 'Разобрать')),
     preview);
 
   modal({

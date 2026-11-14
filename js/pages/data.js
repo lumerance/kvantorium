@@ -3,7 +3,7 @@
 // независимых набора списка/расписания/сопоставления одной и той же формы;
 // переключаются вкладкой вверху страницы, вся логика ниже общая — просто
 // читает/пишет либо st.* (официальный), либо st.actual.* (фактический).
-import { h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile, aggBadge, moreMenu } from '../core/ui.js';
+import { switchToggle, h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile, aggBadge, moreMenu } from '../core/ui.js';
 import { icon } from '../core/icons.js';
 import {
   getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule, autoMapAll, codeBinding, bindCode,
@@ -54,17 +54,30 @@ export function render(root, params = {}) {
     if (readOnly) {
       wrap.append(h('div', { class: 'card', style: { marginBottom: '16px', padding: '12px 16px' } },
         h('span', { class: 'muted' }, agg.completedAt
-          ? '🔒 Агломерация завершена — импорт и правки недоступны. Для новой работы создайте новую агломерацию.'
-          : '🗄 Просмотр архивной агломерации — импорт и правки здесь недоступны. Новые данные по-прежнему пишутся в активную агломерацию.')));
+          ? [icon('lock', 16), 'Агломерация завершена — импорт и правки недоступны. Для новой работы создайте новую агломерацию.']
+          : [icon('archive', 16), 'Просмотр архивной агломерации — импорт и правки здесь недоступны. Новые данные по-прежнему пишутся в активную агломерацию.'])));
     }
 
-    wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
-      h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, '📋 Официальный журнал'),
-      h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, '📝 Фактический журнал')));
-    wrap.append(h('p', { class: 'muted', style: { fontSize: '12.5px', marginTop: '-8px', marginBottom: '16px' } },
-      kind === 'actual'
-        ? 'Реальный состав и расписание — если отличаются от официальных сетевых документов. Список и коды никак не связаны с официальным журналом, кроме переноса оценок по совпадающим ФИО.'
-        : 'Официальные сетевые документы школ — на них строится ведомость, часы по плану и переносятся оценки из фактического журнала.'));
+    const showActual = !!st.ui.showActualJournal;
+    if (!showActual) kind = 'official';
+    wrap.append(h('div', { class: 'card actual-toggle', style: { marginBottom: '16px', padding: '12px 16px' } },
+      switchToggle(showActual, 'Факт. журнал', (v) => {
+        update(s => { s.ui.showActualJournal = v; });
+        if (!v) kind = 'official';
+        toast(v ? 'Фактический журнал включён — он появился в боковом меню' : 'Фактический журнал скрыт. Данные в нём сохранены');
+        redraw();
+      }),
+      h('span', { class: 'muted', style: { fontSize: '12.5px' } },
+        'Второй журнал с реальным составом и расписанием — если они отличаются от официальных сетевых документов.')));
+    if (showActual) {
+      wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
+        h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, 'Официальный журнал'),
+        h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, 'Фактический журнал')));
+      wrap.append(h('p', { class: 'muted', style: { fontSize: '12.5px', marginTop: '-8px', marginBottom: '16px' } },
+        kind === 'actual'
+          ? 'Реальный состав и расписание — если отличаются от официальных сетевых документов. Список и коды никак не связаны с официальным журналом, кроме переноса оценок по совпадающим ФИО.'
+          : 'Официальные сетевые документы школ — на них строится ведомость, часы по плану и переносятся оценки из фактического журнала.'));
+    }
 
     wrap.append(studentsRow(agg, redraw, kind, readOnly));
     wrap.append(scheduleCard(agg, redraw, kind, readOnly));
@@ -93,7 +106,7 @@ function agglomerationSwitcher(st, redraw) {
     const isViewed = agg.id === viewed.id;
     const n = agg.students?.stats?.students ?? 0;
     return h('div', {
-      class: 'check-pill' + (isViewed ? ' on' : ''),
+      class: 'check-pill agg-pill' + (isViewed ? ' on' : ''),
       style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
       onClick: () => { switchViewedAgglomeration(agg.id); redraw(); },
     },
@@ -108,11 +121,11 @@ function agglomerationSwitcher(st, redraw) {
       })(),
       h('span', { class: 'muted mono', style: { fontSize: '11px' } }, `${n} чел.`),
       isActive ? h('span', { class: 'pill ok', style: { fontSize: '10.5px' } }, 'активна') : null,
-      agg.completedAt ? h('span', { class: 'pill', style: { fontSize: '10.5px' }, title: `Завершена ${new Date(agg.completedAt).toLocaleDateString('ru-RU')}` }, '🔒 завершена') : null,
+      agg.completedAt ? h('span', { class: 'pill', style: { fontSize: '10.5px' }, title: `Завершена ${new Date(agg.completedAt).toLocaleDateString('ru-RU')}` }, icon('lock', 16), 'завершена') : null,
       h('button', {
         class: 'btn sm ghost', title: 'Переименовать', style: { padding: '2px 6px' },
         onClick: (e) => { e.stopPropagation(); renameModal(agg, redraw); },
-      }, '✎'),
+      }, icon('pen', 16)),
       (!isActive) ? h('button', {
         class: 'btn sm ghost', title: 'Сделать активной — новые записи будут идти сюда', style: { padding: '2px 6px' },
         onClick: (e) => {
@@ -120,13 +133,13 @@ function agglomerationSwitcher(st, redraw) {
           confirmBox(`Сделать «${agg.name}» активной агломерацией? Все новые изменения (отметки, импорт, набор) будут идти в неё, пока не переключите снова.`,
             () => { setActiveAgglomeration(agg.id); redraw(); });
         },
-      }, '⇧ сделать активной') : null);
+      }, icon('arrowUp', 16), 'сделать активной') : null);
   };
 
   return h('div', { class: 'card', style: { marginBottom: '16px' } },
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' } },
       h('div', {},
-        h('h3', { style: { margin: '0 0 4px' } }, '📚 Агломерации'),
+        h('h3', { style: { margin: '0 0 4px' } }, icon('book', 16), 'Агломерации'),
         h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
           'Каждая — свой набор детей на блок из трёх заездов. Прошлые остаются доступны для просмотра, писать можно только в активную.')),
       h('button', { class: 'btn sm primary', onClick: () => newAgglomerationModal(redraw) }, '+ Новая агломерация')),
@@ -142,7 +155,7 @@ function finishRow(agg, redraw) {
       ? h('p', { class: 'muted' }, `«${agg.name}» завершена ${new Date(agg.completedAt).toLocaleDateString('ru-RU')}: списано учебных ${c?.teaching ?? 0} ч и прочих ${c?.method ?? 0} ч. Данные открыты только для просмотра.`)
       : h('p', { class: 'muted' }, `Когда все три заезда «${agg.name}» пройдены — завершите агломерацию: она закроется для правки, а проведённые уроки и методические часы спишутся в «Часы по плану».`),
     agg.completedAt
-      ? h('button', { class: 'btn sm', onClick: () => confirmReopen(agg, redraw) }, '🔓 Открыть для правки')
+      ? h('button', { class: 'btn sm', onClick: () => confirmReopen(agg, redraw) }, icon('unlock', 16), 'Открыть для правки')
       : h('button', { class: 'btn sm', onClick: () => openFinishDialog(agg, redraw) }, icon('lock', 15), 'Завершить агломерацию'));
 }
 
@@ -186,7 +199,7 @@ function studentsRow(agg, redraw, kind, readOnly) {
         h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
           s ? `${s.stats.subjects} предм. · ${s.stats.groups} групп · ${s.stats.students} детей` + (s.sourceName ? ` — ${s.sourceName}` : '')
             : 'Список ещё не загружен')),
-      h('button', { class: 'btn primary', onClick: () => openStudentsModal(kind, redraw) }, s ? '📋 Открыть' : '📋 Загрузить')));
+      h('button', { class: 'btn primary', onClick: () => openStudentsModal(kind, redraw) }, s ? [icon('list', 16), 'Открыть'] : [icon('list', 16), 'Загрузить'])));
 }
 
 function openStudentsModal(kind, outerRedraw) {
@@ -215,7 +228,7 @@ function studentsCard(agg, redraw, kind, opts = {}) {
   const { subj, grp } = uiKeys(kind);
   const body = h('div', {});
   if (readOnly) body.append(h('p', { class: 'muted', style: { fontSize: '12.5px', marginTop: 0 } },
-    '🗄 Архивная агломерация — список показан только для просмотра.'));
+    'Архивная агломерация — список показан только для просмотра.'));
   if (s) {
     body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Файл'), h('span', { class: 'v' }, s.sourceName || '—')));
     body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Предметов / групп / детей'),
@@ -241,19 +254,19 @@ function studentsCard(agg, redraw, kind, opts = {}) {
     }
     body.append(list);
     body.append(h('div', { style: { display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' } },
-      h('button', { class: 'btn sm', onClick: () => download('Обучающиеся.csv', studentsToCsv(s.subjects), 'text/csv;charset=utf-8') }, '⤓ Экспорт учеников (CSV)'),
-      readOnly ? null : h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, '⤒ Импорт учеников (CSV)'),
-      readOnly ? null : h('button', { class: 'btn sm', onClick: () => groupsDialog(redraw, false, kind) }, '☑ Выбрать группы'),
+      h('button', { class: 'btn sm', onClick: () => download('Обучающиеся.csv', studentsToCsv(s.subjects), 'text/csv;charset=utf-8') }, icon('download', 16), 'Экспорт учеников (CSV)'),
+      readOnly ? null : h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, icon('upload', 16), 'Импорт учеников (CSV)'),
+      readOnly ? null : h('button', { class: 'btn sm', onClick: () => groupsDialog(redraw, false, kind) }, icon('checkSquare', 16), 'Выбрать группы'),
       (!readOnly && scheduleCodesExist(agg, kind)) ? h('button', {
         class: 'btn sm', title: 'Убрать группы, которых нет в загруженном расписании',
         onClick: () => keepOnlyScheduled(redraw, kind)
-      }, '⚡ Только мои по расписанию') : null,
-      h('button', { class: 'btn sm', onClick: () => { onNavigate?.(); go('journal', kind === 'actual' ? { kind: 'actual' } : undefined); } }, 'Открыть журнал →'),
+      }, icon('zap', 16), 'Только мои по расписанию') : null,
+      h('button', { class: 'btn sm', onClick: () => { onNavigate?.(); go('journal', kind === 'actual' ? { kind: 'actual' } : undefined); } }, 'Открыть журнал', icon('arrowRight', 16)),
     ));
   }
   if (!readOnly) {
     if (!s) body.append(h('div', { style: { marginBottom: '10px' } },
-      h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, '⤒ Импорт учеников из CSV')));
+      h('button', { class: 'btn sm', onClick: () => pickCsv(redraw, kind) }, icon('upload', 16), 'Импорт учеников из CSV')));
     body.append(fileDrop({
       title: s ? 'Загрузить другой список обучающихся (.docx)' : 'Список обучающихся (.docx)',
       hint: 'дети автоматически разбиваются по предметам и группам',
@@ -446,7 +459,7 @@ function scheduleDialog(shift, redraw, afterImport = false, kind) {
         codeBoxes.forEach((cb, c) => { cb.checked = codes.has(c); });
         recount();
       }
-    }, '⚡ Только группы выбранных педагогов')));
+    }, icon('zap', 16), 'Только группы выбранных педагогов')));
   body.append(stat);
   recount();
 
@@ -475,7 +488,7 @@ function planCard(st, redraw) {
     body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Методические часы по плану'), h('span', { class: 'v' }, Math.round(p.totals.method))));
     body.append(h('div', { class: 'kv total' }, h('span', { class: 'k' }, 'Всего'), h('span', { class: 'v' }, Math.round(p.totals.all))));
     body.append(h('div', { style: { marginTop: '12px' } },
-      h('button', { class: 'btn sm', onClick: () => go('hours') }, 'Открыть счётчик часов →')));
+      h('button', { class: 'btn sm', onClick: () => go('hours') }, 'Открыть счётчик часов', icon('arrowRight', 16))));
   }
   body.append(fileDrop({
     title: p ? 'Загрузить другой индивидуальный план (.xlsx)' : 'Индивидуальный план (.xlsx)',
@@ -514,7 +527,7 @@ function actualScheduleRow(agg, redraw, kind, readOnly) {
         h('h3', { style: { margin: '0 0 4px' } }, '2. Расписание по дням'),
         h('p', { class: 'muted', style: { fontSize: '12.5px', margin: 0 } },
           days ? `${days} дн. внесено · ${lessons} занятий всего` : 'Школа обычно присылает расписание на завтра — вносите день за днём')),
-      h('button', { class: 'btn primary', onClick: () => openActualScheduleModal(redraw, readOnly) }, days ? '🗓 Открыть' : '🗓 Внести день')));
+      h('button', { class: 'btn primary', onClick: () => openActualScheduleModal(redraw, readOnly) }, days ? [icon('calendar', 16), 'Открыть'] : [icon('calendar', 16), 'Внести день'])));
 }
 
 function openActualScheduleModal(outerRedraw, readOnly) {
@@ -542,7 +555,7 @@ function scheduleCard(agg, redraw, kind, readOnly) {
       body.append(h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '10px 0' } },
         ...sc.codes.map(c => h('span', { class: 'pill' + (codeBinding(data, c) ? ' ok' : ' warn') }, c))));
       body.append(h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        readOnly ? null : h('button', { class: 'btn sm', onClick: () => scheduleDialog(shift, redraw, false, kind) }, '☑ Оставить только свои'),
+        readOnly ? null : h('button', { class: 'btn sm', onClick: () => scheduleDialog(shift, redraw, false, kind) }, icon('checkSquare', 16), 'Оставить только свои'),
         h('button', { class: 'btn sm', onClick: () => showLessons(sc, shift) }, 'Показать занятия'),
         readOnly ? null : h('button', {
           class: 'btn sm danger', onClick: () => confirmBox(`Удалить расписание ${shift} заезда?`, () => {
@@ -616,7 +629,7 @@ function mappingCard(agg, redraw, kind, readOnly) {
 
   if (!list.length) {
     return h('div', { class: 'card' }, h('h3', {}, '3. Сопоставление групп'),
-      emptyState('🔗', 'Загрузите расписание — коды групп появятся здесь для сопоставления со списком детей.'));
+      emptyState(icon('link', 34), 'Загрузите расписание — коды групп появятся здесь для сопоставления со списком детей.'));
   }
 
   const enrollGroups = data.enroll?.groups || [];
@@ -654,7 +667,7 @@ function mappingCard(agg, redraw, kind, readOnly) {
       h('td', {}, ...usedIn.map(s => h('span', { class: 'pill', style: { marginRight: '4px' } }, `${s} заезд`))),
       h('td', { style: { minWidth: '340px' } }, sel),
       h('td', {}, kind !== 'actual' && cur?.type === 'group' && isDoCode(code)
-        ? h('span', { class: 'pill warn', title: 'Код дополнительного образования привязан к сетевой группе — выберите группу из «Набора»' }, '⚠ ДО?')
+        ? h('span', { class: 'pill warn', title: 'Код дополнительного образования привязан к сетевой группе — выберите группу из «Набора»' }, icon('alert', 16), 'ДО?')
         : cur ? h('span', { class: 'pill ok' }, cur.type === 'enroll' ? 'ДО' : '✓') : h('span', { class: 'pill warn' }, '!')),
     );
   });
@@ -663,7 +676,7 @@ function mappingCard(agg, redraw, kind, readOnly) {
     h('h3', {}, '3. Сопоставление кодов расписания с группами'),
     h('div', { class: 'card-sub' }, 'Коды вида «Т1 РШ7» связываются с группами из списка автоматически: буква — направление, цифра — номер группы, последняя цифра — класс. Коды дополнительного образования (не на Т и И) с сетевыми группами не сопоставляются — их выбирайте из групп «Набора»; одноимённая группа «Набора» подставляется сама.'),
     readOnly ? null : h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
-      h('button', { class: 'btn sm', onClick: () => { const n = autoMapAll(kind); toast(n ? `Сопоставлено автоматически: ${n}` : 'Новых совпадений не найдено'); redraw(); } }, '⚡ Сопоставить автоматически'),
+      h('button', { class: 'btn sm', onClick: () => { const n = autoMapAll(kind); toast(n ? `Сопоставлено автоматически: ${n}` : 'Новых совпадений не найдено'); redraw(); } }, icon('zap', 16), 'Сопоставить автоматически'),
       h('button', { class: 'btn sm danger ghost', onClick: () => { update(x => { dataOf(activeAgg(x), kind).mapping = {}; }); redraw(); } }, 'Сбросить сопоставление')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'compact' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Код'), h('th', {}, 'Разбор'), h('th', {}, 'Заезды'), h('th', {}, 'Группа из списка'), h('th', {}, ''))),

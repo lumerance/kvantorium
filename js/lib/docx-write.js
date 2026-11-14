@@ -25,13 +25,15 @@ export function p(text = '', opts = {}) {
 const border = (sz = 4) => `<w:top w:val="single" w:sz="${sz}" w:color="000000"/><w:left w:val="single" w:sz="${sz}" w:color="000000"/>` +
   `<w:bottom w:val="single" w:sz="${sz}" w:color="000000"/><w:right w:val="single" w:sz="${sz}" w:color="000000"/>`;
 
+const NO_BORDER = '<w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/>';
+
 /** Ячейка. {text, bold, align, span, fill, size, valign} */
-function tc(cell, widthTwip) {
+function tc(cell, widthTwip, noBorders) {
   const c = typeof cell === 'string' ? { text: cell } : (cell || {});
   return `<w:tc><w:tcPr>` +
     `<w:tcW w:w="${widthTwip}" w:type="dxa"/>` +
     (c.span > 1 ? `<w:gridSpan w:val="${c.span}"/>` : '') +
-    `<w:tcBorders>${border()}</w:tcBorders>` +
+    `<w:tcBorders>${noBorders ? NO_BORDER : border()}</w:tcBorders>` +
     (c.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${c.fill}"/>` : '') +
     `<w:vAlign w:val="${c.valign || 'center'}"/>` +
     `</w:tcPr>` +
@@ -39,24 +41,26 @@ function tc(cell, widthTwip) {
     `</w:tc>`;
 }
 
-/** Таблица. widths — доли ширины (сумма любая), rows — массив массивов ячеек. */
-export function table(widths, rows) {
-  const total = TWIP(17);                 // рабочая ширина страницы ~17 см
+/** Таблица. widths — доли ширины (сумма любая), rows — массив массивов ячеек.
+ *  opts: {widthCm, noBorders, header: число строк-шапки, повторяемых на каждой странице} */
+export function table(widths, rows, opts = {}) {
+  const total = TWIP(opts.widthCm || 17);  // рабочая ширина страницы (по умолчанию ~17 см)
   const sum = widths.reduce((a, b) => a + b, 0);
   const w = widths.map(x => Math.round(x / sum * total));
   const grid = `<w:tblGrid>${w.map(x => `<w:gridCol w:w="${x}"/>`).join('')}</w:tblGrid>`;
-  const body = rows.map(cells => {
+  const body = rows.map((cells, ri) => {
     let col = 0;
     const tcs = cells.map(cell => {
       const span = (typeof cell === 'object' && cell.span) || 1;
       const width = w.slice(col, col + span).reduce((a, b) => a + b, 0);
       col += span;
-      return tc(cell, width);
+      return tc(cell, width, opts.noBorders);
     }).join('');
-    return `<w:tr><w:trPr><w:cantSplit/></w:trPr>${tcs}</w:tr>`;
+    const head = opts.header && ri < opts.header ? '<w:tblHeader/>' : '';
+    return `<w:tr><w:trPr><w:cantSplit/>${head}</w:trPr>${tcs}</w:tr>`;
   }).join('');
   return `<w:tbl><w:tblPr><w:tblW w:w="${total}" w:type="dxa"/>` +
-    `<w:tblBorders>${border()}</w:tblBorders>` +
+    `<w:tblBorders>${opts.noBorders ? NO_BORDER : border()}</w:tblBorders>` +
     `<w:tblLayout w:type="fixed"/></w:tblPr>${grid}${body}</w:tbl>`;
 }
 
@@ -68,8 +72,9 @@ export function table(widths, rows) {
 export async function buildDocx(blocks, opts = {}) {
   const pageW = opts.landscape ? 16838 : 11906;
   const pageH = opts.landscape ? 11906 : 16838;
+  const m = { top: 850, right: 850, bottom: 850, left: 1134, ...(opts.margins || {}) };
   const sect = `<w:sectPr><w:pgSz w:w="${pageW}" w:h="${pageH}"${opts.landscape ? ' w:orient="landscape"' : ''}/>` +
-    `<w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="1134" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`;
+    `<w:pgMar w:top="${m.top}" w:right="${m.right}" w:bottom="${m.bottom}" w:left="${m.left}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`;
 
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">

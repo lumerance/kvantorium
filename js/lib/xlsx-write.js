@@ -20,15 +20,25 @@ export const S = {
   NUM: 7,          // число с рамкой, по центру
   TOTAL: 8,        // итог: жирный, рамка, по центру, заливка
   TOTAL_L: 9,      // итог-подпись: жирный, рамка, слева, заливка
+  NUM2: 10,        // число с рамкой, два знака после запятой
+  HEAD_V10: 11,    // шапка с вертикальным текстом, шрифт 10
+  TEXT12: 12,      // обычный текст 12 pt
+  BOLD12: 13,      // жирный 12 pt
+  TITLE16: 14,     // заголовок 16 pt по центру
+  NUM1: 15,        // число без рамки, один знак после запятой
 };
 
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="4">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0"/></numFmts>
+<fonts count="7">
  <font><sz val="10"/><name val="Times New Roman"/></font>
  <font><b/><sz val="14"/><name val="Times New Roman"/></font>
  <font><b/><sz val="10"/><name val="Times New Roman"/></font>
  <font><sz val="8"/><name val="Times New Roman"/></font>
+ <font><sz val="12"/><name val="Times New Roman"/></font>
+ <font><b/><sz val="12"/><name val="Times New Roman"/></font>
+ <font><b/><sz val="16"/><name val="Times New Roman"/></font>
 </fonts>
 <fills count="3">
  <fill><patternFill patternType="none"/></fill>
@@ -43,7 +53,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
  </border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="10">
+<cellXfs count="16">
  <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
  <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
  <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
@@ -54,6 +64,12 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
  <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
  <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
  <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+ <xf numFmtId="2" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+ <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1" textRotation="90"/></xf>
+ <xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>
+ <xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>
+ <xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+ <xf numFmtId="164" fontId="4" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -62,6 +78,12 @@ function cellXml(ref, cell) {
   if (cell === null || cell === undefined || cell === '') return '';
   const c = (typeof cell === 'object' && !Array.isArray(cell)) ? cell : { v: cell };
   const s = c.s ? ` s="${c.s}"` : '';
+  if (c.f) {
+    const f = `<f>${xmlEsc(c.f)}</f>`;
+    if (typeof c.v === 'number' && isFinite(c.v)) return `<c r="${ref}"${s}>${f}<v>${c.v}</v></c>`;
+    if (c.v !== undefined && c.v !== null && c.v !== '') return `<c r="${ref}"${s} t="str">${f}<v>${xmlEsc(c.v)}</v></c>`;
+    return `<c r="${ref}"${s}>${f}</c>`;
+  }
   if (c.v === null || c.v === undefined || c.v === '') return `<c r="${ref}"${s}/>`;
   if (typeof c.v === 'number' && isFinite(c.v)) return `<c r="${ref}"${s}><v>${c.v}</v></c>`;
   return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(c.v)}</t></is></c>`;
@@ -93,7 +115,7 @@ ${cols ? `<cols>${cols}</cols>` : ''}
 <sheetData>${rows}</sheetData>
 ${merges}
 <pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>
-<pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>
+<pageSetup orientation="${sheet.portrait ? 'portrait' : 'landscape'}" paperSize="9" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
 }
 
@@ -120,6 +142,7 @@ ${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" Co
       name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheets>${sheets.map((s, i) => `<sheet name="${xmlEsc(s.name).slice(0, 31)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets>
+<calcPr fullCalcOnLoad="1"/>
 </workbook>`
     },
     {
