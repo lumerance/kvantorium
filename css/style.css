@@ -1088,3 +1088,12 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
   .sched-codes{display:none!important}
   .sched-codes.open{display:flex!important}
 }
+
+/* веб-приложение с экрана «Домой»: нижняя панель — вплотную к краю экрана,
+   зона полоски «домой» (safe area) — внутри панели, а не пустым местом под ней */
+@media (max-width:900px){
+  .standalone .bottom-nav{left:0;right:0;bottom:0;border-radius:20px 20px 0 0;border-bottom:0;
+    padding:6px 10px max(6px, env(safe-area-inset-bottom))}
+  .standalone .bn-sheet{bottom:calc(72px + env(safe-area-inset-bottom))}
+  .standalone .main{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+}
