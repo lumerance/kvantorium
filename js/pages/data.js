@@ -99,7 +99,7 @@ export function render(root, params = {}) {
 /* ---------------- облачное сохранение ---------------- */
 function cloudCard() {
   const box = h('div', {});
-  const draw = () => box.replaceChildren(...[cloudCardBody(), cloudState().signedIn ? shareCard(draw) : null].filter(Boolean));
+  const draw = () => box.replaceChildren(cloudCardBody(draw));
   draw();
   const off = onCloud(() => { if (box.isConnected) draw(); else off(); });
   return box;
@@ -119,7 +119,7 @@ function shareCard(redraw) {
     } catch (e) { console.error(e); toast('Не получилось: ' + e.message, 'err', 6000); }
     sharing = false; redraw();
   };
-  return h('div', { class: 'card share-card', style: { marginBottom: '16px' } },
+  return h('div', { class: 'cloud-share' },
     h('div', { class: 'share-head' },
       switchToggle(!!sh.enabled, 'Делиться группами с коллегами', (v) => turn(v), { title: 'Коллега сможет вставить ссылку в генератор расписания' }),
       sharing ? h('span', { class: 'muted', style: { fontSize: '12.5px' } }, 'Подождите…') : null),
@@ -132,9 +132,9 @@ function shareCard(redraw) {
       h('button', { class: 'btn sm', type: 'button', disabled: sharing || null, title: 'Выложить свежие данные сейчас', onClick: () => turn(true) }, icon('refresh', 14), 'Обновить')) : null);
 }
 
-function cloudCardBody() {
+function cloudCardBody(redraw) {
   const c = cloudState();
-  return h('div', { class: 'card cloud-card', style: { marginBottom: '16px' } },
+  return h('div', { class: 'card cloud-panel', style: { marginBottom: '16px' } }, h('div', { class: 'cloud-card' },
     h('div', { class: 'cloud-ico' + (c.signedIn ? ' on' : '') }, icon(c.signedIn ? 'cloud' : 'cloudOff', 22)),
     h('div', { style: { flex: '1', minWidth: '0' } },
       h('h3', { style: { margin: '0 0 4px' } }, c.signedIn ? `Облачное сохранение · ${accountShort() || 'Яндекс'}` : 'Облачное сохранение выключено'),
@@ -143,7 +143,8 @@ function cloudCardBody() {
         : 'Сейчас данные есть только в этом браузере. Войдите через Яндекс ID — и они будут на всех ваших устройствах без ручного переноса файлов.')),
     c.signedIn
       ? h('button', { class: 'btn', type: 'button', onClick: () => syncNow() }, icon('refresh', 16), 'Синхронизировать')
-      : h('button', { class: 'btn primary', type: 'button', onClick: () => loginDialog() }, icon('cloud', 16), 'Войти через Яндекс'));
+      : h('button', { class: 'btn primary', type: 'button', onClick: () => loginDialog() }, icon('cloud', 16), 'Войти через Яндекс')),
+    c.signedIn ? shareCard(redraw) : null);
 }
 
 /* ---------------- агломерации: список, переключение, создание ---------------- */
