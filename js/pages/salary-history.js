@@ -9,6 +9,7 @@ import { comparisonCard, detailTableCard, applyBonus, RATE_LABELS } from './sala
 import { buildPayslipDocx } from '../exporters/payslip.js';
 import { payslipPrintNode } from '../exporters/payslip-print.js';
 import { go } from '../core/router.js';
+import { accountName } from '../core/cloud.js';
 
 const findEntry = (history, year, month) => history.find(h => h.year === year && h.month === month) || null;
 
@@ -287,7 +288,7 @@ function bonusCard(entry, outerRedraw, openMonth) {
 function requisitesCard(redraw) {
   const st = getState();
   const r = st.salary.requisites || {};
-  const fioValue = r.fio || st.plan?.teacher || '';
+  const fioValue = r.fio || st.plan?.teacher || accountName();
 
   const field = (label, key, value, placeholder) => h('label', { class: 'field' },
     h('span', {}, label),

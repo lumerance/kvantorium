@@ -41,7 +41,7 @@ function buildSheet({ title, kind, works, log, plan, meta }) {
   // ---- шапка документа ----
   setRow(0, []); put(0, lastCol - 2, 'УТВЕРЖДАЮ', S.BOLD);
   put(1, lastCol - 2, 'Директор ДТ "Кванториум-28"', S.PLAIN);
-  put(2, lastCol - 2, '_______________Н.А. Домашенко', S.PLAIN);
+  put(2, lastCol - 2, '_______________ / _______________', S.PLAIN);
   put(3, lastCol - 2, '«____» ______________ 20__ г.', S.PLAIN);
 
   put(5, 1, 'ОТЧЁТ ПО ИНДИВИДУАЛЬНОМУ ПЛАНУ РАБОТЫ (фактически выполнено)', S.TITLE);

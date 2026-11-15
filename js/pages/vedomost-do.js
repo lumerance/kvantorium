@@ -6,6 +6,7 @@ import { h, toast, modal, download } from '../core/ui.js';
 import { icon } from '../core/icons.js';
 import { getState, update, viewedAgg, lessonsForCode } from '../core/store.js';
 import { placeOfAgg, placeTitle } from '../data/places.js';
+import { accountName } from '../core/cloud.js';
 import { buildVedomostDoXlsx, randomScores, levelOf } from '../exporters/vedomost-do.js';
 
 const SHIFTS = [1, 2, 3];
@@ -53,7 +54,7 @@ export function openVedomostDo() {
   const prof = st.docsProfile || {};
   const place = placeOfAgg(agg);
   const val = {
-    teacher: prof.teacher || st.plan?.teacher || agg.vedomostHeader?.teacher || '',
+    teacher: prof.teacher || st.plan?.teacher || agg.vedomostHeader?.teacher || accountName(),
     kvantum: prof.kvantum || st.plan?.direction || '',
     place: placeTitle(place),
     year: schoolYear(),

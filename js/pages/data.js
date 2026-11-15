@@ -18,6 +18,8 @@ import { actualScheduleCard } from './actual-schedule-panel.js';
 import { go } from '../core/router.js';
 import { openFinishDialog, confirmReopen } from './agglomeration-finish.js';
 import { placeOfAgg } from '../data/places.js';
+import { cloudState, syncNow, accountShort, onCloud } from '../core/cloud.js';
+import { loginDialog } from '../core/account.js';
 
 const norm = (s) => String(s || '').toLowerCase();
 const dataOf = (st, kind) => (kind === 'actual' ? st.actual : st);
@@ -36,7 +38,7 @@ export function render(root, params = {}) {
     const readOnly = isViewingArchive(st);
     wrap.innerHTML = '';
     wrap.append(h('div', { class: 'page-head' },
-      h('div', {}, h('h1', {}, 'Данные', aggBadge(agg, readOnly)), h('p', {}, 'Импорт документов, сопоставление групп и резервные копии. Всё хранится локально в браузере.')),
+      h('div', {}, h('h1', {}, 'Данные', aggBadge(agg, readOnly)), h('p', {}, 'Импорт документов, сопоставление групп, облачное сохранение и резервные копии.')),
       h('div', { class: 'head-actions' },
         moreMenu([
           { title: 'Резервная копия всех данных' },
@@ -50,6 +52,7 @@ export function render(root, params = {}) {
         ], { label: 'Резервная копия' }),
       )));
 
+    wrap.append(cloudCard());
     wrap.append(agglomerationSwitcher(st, redraw));
     if (readOnly) {
       wrap.append(h('div', { class: 'card', style: { marginBottom: '16px', padding: '12px 16px' } },
@@ -89,6 +92,29 @@ export function render(root, params = {}) {
   }
 
   redraw();
+}
+
+/* ---------------- облачное сохранение ---------------- */
+function cloudCard() {
+  const box = h('div', {});
+  const draw = () => box.replaceChildren(cloudCardBody());
+  draw();
+  const off = onCloud(() => { if (box.isConnected) draw(); else off(); });
+  return box;
+}
+
+function cloudCardBody() {
+  const c = cloudState();
+  return h('div', { class: 'card cloud-card', style: { marginBottom: '16px' } },
+    h('div', { class: 'cloud-ico' + (c.signedIn ? ' on' : '') }, icon(c.signedIn ? 'cloud' : 'cloudOff', 22)),
+    h('div', { style: { flex: '1', minWidth: '0' } },
+      h('h3', { style: { margin: '0 0 4px' } }, c.signedIn ? `Облачное сохранение · ${accountShort() || 'Яндекс'}` : 'Облачное сохранение выключено'),
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, c.signedIn
+        ? `Данные сохраняются на ваш Яндекс.Диск (папка «Приложения») и доступны на всех устройствах, где вы войдёте. Последняя синхронизация: ${c.lastSync ? new Date(c.lastSync).toLocaleString('ru-RU') : '—'}.${c.error ? ' Ошибка: ' + c.error : ''}`
+        : 'Сейчас данные есть только в этом браузере. Войдите через Яндекс ID — и они будут на всех ваших устройствах без ручного переноса файлов.')),
+    c.signedIn
+      ? h('button', { class: 'btn', type: 'button', onClick: () => syncNow() }, icon('refresh', 16), 'Синхронизировать')
+      : h('button', { class: 'btn primary', type: 'button', onClick: () => loginDialog() }, icon('cloud', 16), 'Войти через Яндекс'));
 }
 
 /* ---------------- агломерации: список, переключение, создание ---------------- */

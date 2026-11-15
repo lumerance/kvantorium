@@ -90,8 +90,8 @@ const CONST_KEYS = [
   ['base', 'Оклад 1 ставки, ₽'], ['intensive', 'Доплата за интенсив, ₽'], ['quality', 'Надбавка за качество, ₽'],
   ['gph', 'Сумма ГПХ (начислено), ₽'], ['ndfl', 'НДФЛ, %'], ['district', 'Районный коэф., %'], ['north', 'Северная надбавка, %'],
 ];
-// по расчётному листку за июль 2026 — пока педагог не задал свои
-const BUILTIN_CONSTANTS = { base: 21700, intensive: 17811.97, quality: 2467.98, gph: 22142, ndfl: 13, district: 30, north: 30 };
+// пока педагог не задал свои: суммы пустые, проценты — по закону для Амурской области
+const BUILTIN_CONSTANTS = { base: 0, intensive: 0, quality: 0, gph: 0, ndfl: 13, district: 30, north: 30 };
 const myConstants = (s) => ({ ...BUILTIN_CONSTANTS, ...(s.myConstants || {}) });
 
 /** Окно «Мои актуальные значения»: к ним возвращает кнопка сброса. */
@@ -121,11 +121,7 @@ function myConstantsModal(redraw) {
         h('button', {
           class: 'btn sm', type: 'button',
           onClick: () => { for (const [k] of CONST_KEYS) inputs[k].value = String(s[k]); },
-        }, icon('copy', 16), 'Взять из текущих полей'),
-        h('button', {
-          class: 'btn sm ghost', type: 'button',
-          onClick: () => { for (const [k] of CONST_KEYS) inputs[k].value = String(BUILTIN_CONSTANTS[k]); },
-        }, icon('reset', 16), 'Как в листке за июль 2026'))),
+        }, icon('copy', 16), 'Взять из текущих полей'))),
     okText: 'Сохранить и применить',
     onOk: () => {
       const v = read();
@@ -384,6 +380,8 @@ function renderCalcTab(root) {
               class: 'btn sm ghost icon-btn', title: 'Мои актуальные значения…', 'aria-label': 'Мои актуальные значения',
               onClick: () => myConstantsModal(redraw),
             }, icon('settings', 16)))),
+        !s.base ? h('p', { class: 'salary-empty' }, icon('alert', 15),
+          'Впишите суммы из своего расчётного листка (или в окне «Мои актуальные значения» — шестерёнка справа), и расчёт оживёт.') : null,
         h('div', { class: 'row' }, field('Оклад 1 ставки, ₽', 'base'), field('Доплата за интенсив, ₽', 'intensive')),
         h('div', { class: 'row', style: { marginTop: '10px' } },
           field('Надбавка за качество, ₽', 'quality'), s.hasGph ? field('Сумма ГПХ (начислено), ₽', 'gph') : null),
@@ -505,7 +503,7 @@ function renderCalcTab(root) {
       wrap.append(h('div', { class: 'card', style: { marginBottom: '16px' } },
         h('h3', {}, `Как посчитан неполный месяц (${rateLabel})`),
         h('div', { class: 'card-sub' },
-          `Отработано ${one.fact} из ${one.norm} рабочих дней — оклад и обе надбавки урезаны в той же пропорции, районный коэффициент и северная надбавка — 30% от их суммы. Формула проверена на реальном расчётном листке за июль 2026.`),
+          `Отработано ${one.fact} из ${one.norm} рабочих дней — оклад и обе надбавки урезаны в той же пропорции, районный коэффициент и северная надбавка — 30% от их суммы.`),
         h('div', { class: 'kv' }, h('span', { class: 'k' }, `Оплата по окладу (${s.base * r.rate} × ${one.fact}/${one.norm})`), h('span', { class: 'v' }, money(one.oklad))),
         h('div', { class: 'kv' }, h('span', { class: 'k' }, `Надбавка за качество (${s.quality} × ${one.fact}/${one.norm})`), h('span', { class: 'v' }, money(one.quality))),
         h('div', { class: 'kv' }, h('span', { class: 'k' }, `Доплата за интенсив (${s.intensive} × ${one.fact}/${one.norm})`), h('span', { class: 'v' }, money(one.intensive))),

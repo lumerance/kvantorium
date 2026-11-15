@@ -3,6 +3,7 @@ import { icon } from '../core/icons.js';
 import { h, toast, download, emptyState, aggBadge } from '../core/ui.js';
 import { getState, update, allGroups, viewedAgg, activeAgg, isViewingArchive } from '../core/store.js';
 import { go } from '../core/router.js';
+import { accountName } from '../core/cloud.js';
 import { buildRows, buildVedomostDocx, NA, SHIFTS } from '../exporters/vedomost.js';
 
 const DEFAULT_HEADER = {
@@ -22,7 +23,7 @@ export function render(root) {
 
   function header() {
     const st = getState();
-    return { ...DEFAULT_HEADER, teacher: st.plan?.teacher || '', ...(viewedAgg(st).vedomostHeader || {}) };
+    return { ...DEFAULT_HEADER, teacher: st.plan?.teacher || accountName(), ...(viewedAgg(st).vedomostHeader || {}) };
   }
 
   function selectedGroups(agg) {

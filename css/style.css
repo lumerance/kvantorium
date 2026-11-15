@@ -944,3 +944,30 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
 .mk-switch{gap:14px;align-items:flex-end;flex-wrap:wrap}
 .mk-group{display:flex;flex-direction:column;gap:4px}
 .mk-label{font-size:11px;font-weight:800;letter-spacing:.9px;color:var(--muted);padding-left:4px}
+
+/* ---------- аккаунт в верхней строке ---------- */
+.tb-account{display:flex}
+.tb-login,.tb-user{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:11px;border:1px solid var(--glass-border);
+  background:rgba(255,255,255,.04);color:var(--text);font:600 13px var(--font);cursor:pointer;transition:border-color 160ms ease,transform 160ms var(--ease-out)}
+.tb-login:active,.tb-user:active{transform:scale(.97)}
+.tb-login{color:var(--neon);border-color:rgba(var(--accent-rgb),.4)}
+.tb-login .ico,.tb-user .ico{display:grid;margin:0}
+@media (hover:hover) and (pointer:fine){.tb-login:hover,.tb-user:hover{border-color:rgba(var(--accent-rgb),.55)}}
+.tb-user{padding-left:5px}
+.tb-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;flex:none}
+.tb-avatar.ph{display:grid;place-items:center;background:rgba(var(--accent-rgb),.15);color:var(--neon)}
+.tb-user-name{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sync-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted)}
+.sync-dot.ok{background:var(--neon);box-shadow:0 0 calc(8px * var(--glow)) var(--neon)}
+.sync-dot.wait{background:var(--cyan);animation:syncPulse 1s ease-in-out infinite alternate}
+.sync-dot.warn{background:var(--amber)}
+.sync-dot.err{background:var(--red)}
+@keyframes syncPulse{to{opacity:.35}}
+.login-body ul{margin:10px 0 0;padding-left:18px;color:var(--muted);font-size:13px;display:flex;flex-direction:column;gap:4px}
+@media (max-width:700px){.tb-user-name,.tb-login-text{display:none}}
+.cloud-card{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.cloud-ico{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--line);flex:none}
+.cloud-ico.on{color:var(--neon);background:rgba(var(--accent-rgb),.1);border-color:rgba(var(--accent-rgb),.35)}
+.cloud-ico .ico{display:grid;margin:0}
+.salary-empty{display:flex;gap:8px;align-items:flex-start;margin:0 0 12px;padding:10px 12px;border-radius:10px;font-size:12.5px;color:var(--amber);background:rgba(255,200,87,.07);border:1px solid rgba(255,200,87,.3)}
+.salary-empty .ico{margin:2px 0 0}

@@ -23,7 +23,7 @@ export function tripsList(st = getState()) {
   }
   return (list || DEFAULT_TRIPS).map((t, i) => ({ id: t.id || `t${i}`, mk: t.mk || 'mk2', ...t }));
 }
-export const myTeam = (st = getState()) => st.trips?.team ?? 2;
+export const myTeam = (st = getState()) => st.trips?.team ?? 1;
 export const myMk = (st = getState()) => st.trips?.mk ?? 'mk2';
 export const myTrips = (st = getState()) => tripsList(st).filter(t => t.mk === myMk(st) && t.team === myTeam(st));
 

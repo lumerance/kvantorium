@@ -11,6 +11,7 @@ import { h } from './ui.js';
 import { icon } from './icons.js';
 import { initThemeToggle } from './theme.js';
 import { motionOff } from './appearance.js';
+import { accountChip } from './account.js';
 import { getState, subscribe, viewedAgg, isViewingArchive } from './store.js';
 
 // Пункты меню: key — что подсвечивать, match — какие маршруты к нему относятся.
@@ -140,7 +141,7 @@ export function initShell() {
   const aggChip = h('a', { class: 'tb-agg', href: '#/data', title: 'Агломерации — на странице «Данные»' });
   const themeBtn = h('button', { class: 'tb-icon', type: 'button', id: 'theme-toggle' });
   const menuBtn = h('button', { class: 'tb-icon tb-menu', type: 'button', title: 'Меню', onClick: () => app.classList.toggle('nav-open') }, icon('menu', 19));
-  topbar.append(menuBtn, crumbs, h('div', { class: 'tb-spacer' }), aggChip, themeBtn);
+  topbar.append(menuBtn, crumbs, h('div', { class: 'tb-spacer' }), aggChip, accountChip(), themeBtn);
   initThemeToggle(themeBtn, (t) => themeBtn.replaceChildren(icon(t === 'light' ? 'moon' : 'sun', 18)));
   document.getElementById('nav-backdrop')?.addEventListener('click', () => app.classList.remove('nav-open'));
 

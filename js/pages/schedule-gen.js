@@ -13,13 +13,14 @@ import { programHours, defaultShiftHours } from '../parsers/ktp.js';
 import { placeOfAgg, placeTitle } from '../data/places.js';
 import { buildSchedule, schoolDays, countPlaced, checkGrid, weeksOf, weekdayIdx, DEFAULT_TIMES } from '../lib/schedule-build.js';
 import { buildScheduleDocx } from '../exporters/schedule-docx.js';
+import { accountName } from '../core/cloud.js';
 
-const DEFAULT_KV = { title: 'Руководитель МТ «Кванториум-28» №1', head: 'О.В. Гончарук' };
+const DEFAULT_KV = { title: 'Руководитель МТ «Кванториум-28»', head: '' };
 const natural = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
 const shortDate = (iso) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y.slice(2)}`; };
 const WD_SHORT = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
-/** «Рафальский Константин Евгеньевич» -> «Рафальский К.» */
+/** «Иванов Иван Иванович» -> «Иванов И.» */
 const teacherShort = (fio) => {
   const [last, first] = String(fio || '').trim().split(/\s+/);
   return last ? `${last}${first ? ' ' + first[0] + '.' : ''}` : '';
@@ -101,7 +102,7 @@ export function openScheduleGenerator() {
     const prof = getState().docsProfile || {};
     const plan = getState().plan || {};
     const kv = prof.kvantum || plan.direction || '';
-    const teacher = teacherShort(prof.teacher || plan.teacher || '');
+    const teacher = teacherShort(prof.teacher || plan.teacher || accountName());
     state.direction = getState().scheduleGen?.direction || (kv ? `${kv}${teacher ? ` (${teacher})` : ''}` : teacher);
     state.groups = groupsOfAgg(agg, state.shift);
     if (draft) {
@@ -179,21 +180,21 @@ export function openScheduleGenerator() {
               : 'Укажите даты заезда.')),
         h('div', {},
           h('h4', { class: 'sg-h' }, 'Шапка: школа'),
-          h('label', { class: 'field' }, h('span', {}, 'Школа (после «Директор школы»)'), txt(state.school, 'name', 'МОБУ «Увальская СОШ»')),
+          h('label', { class: 'field' }, h('span', {}, 'Школа (после «Директор школы»)'), txt(state.school, 'name', 'МОБУ «… СОШ»')),
           h('div', { class: 'row', style: { marginTop: '10px' } },
             h('label', { class: 'field' }, h('span', {}, 'Населённый пункт'), txt(state.school, 'locality', 'с. Новокиевский Увал Амурской области')),
-            h('label', { class: 'field' }, h('span', {}, 'Директор (Фамилия И.О.)'), txt(state.school, 'director', 'Онищенко Н.В.'))),
+            h('label', { class: 'field' }, h('span', {}, 'Директор (Фамилия И.О.)'), txt(state.school, 'director', 'Иванова И.И.'))),
           h('h4', { class: 'sg-h', style: { marginTop: '14px' } }, 'Шапка: технопарк'),
           h('div', { class: 'row' },
             h('label', { class: 'field' }, h('span', {}, 'Должность'), txt(state.kv, 'title')),
             h('label', { class: 'field' }, h('span', {}, 'И.О. Фамилия'), txt(state.kv, 'head'))),
-          h('label', { class: 'field', style: { marginTop: '10px' } }, h('span', {}, 'Направление (педагог) — строка над уроками'), txt(state, 'direction', 'VR/AR/IT (Рафальский К.)')),
+          h('label', { class: 'field', style: { marginTop: '10px' } }, h('span', {}, 'Направление (педагог) — строка над уроками'), txt(state, 'direction', 'VR/AR/IT (Иванов И.)')),
           h('h4', { class: 'sg-h', style: { marginTop: '14px' } }, 'Второй педагог'),
           h('label', { class: 'check-pill', style: { display: 'inline-flex' } },
             h('input', { type: 'checkbox', checked: state.second.enabled, style: { width: 'auto', margin: 0 }, onChange: (e) => { state.second.enabled = e.target.checked; step1(); } }),
             h('span', {}, 'Пустая таблица второго педагога (те же даты и уроки — он заполнит сам)')),
           state.second.enabled ? h('div', { class: 'row', style: { marginTop: '10px' } },
-            h('label', { class: 'field' }, h('span', {}, 'Направление (педагог)'), txt(state.second, 'direction', 'Робототехника (Приходько А.)')),
+            h('label', { class: 'field' }, h('span', {}, 'Направление (педагог)'), txt(state.second, 'direction', 'Робототехника (Петров П.)')),
             h('label', { class: 'field' }, h('span', {}, 'Где в таблице'),
               h('select', { onChange: (e) => { state.second.first = e.target.value === 'first'; } },
                 h('option', { value: 'first', selected: state.second.first }, 'Выше моего блока'),
