@@ -27,6 +27,7 @@ const NAV = [
   { key: 'salary', href: '#/salary', label: 'Зарплата', icon: 'salary' },
   { section: 'Бумаги' },
   { key: 'documents', href: '#/documents', label: 'Документы', icon: 'documents' },
+  { key: 'assistant', href: '#/assistant', label: 'Помощник', icon: 'sparkle' },
   { spacer: true },
   { key: 'data', href: '#/data', label: 'Данные и импорт', icon: 'data' },
   { key: 'appearance', href: '#/appearance', label: 'Оформление', icon: 'palette' },
@@ -39,7 +40,7 @@ function locate(name, params) {
     : { key: 'journal', crumbs: ['Работа с детьми', 'Журнал'] };
   if (name === 'vedomost') return { key: 'documents', crumbs: ['Документы', 'Итоговая ведомость'] };
   const item = NAV.find(n => n.key === name);
-  const section = { enroll: 'Работа с детьми', trips: 'Учёт', hours: 'Учёт', salary: 'Учёт', documents: 'Бумаги', appearance: 'Настройки' }[name];
+  const section = { enroll: 'Работа с детьми', trips: 'Учёт', hours: 'Учёт', salary: 'Учёт', documents: 'Бумаги', assistant: 'Бумаги', appearance: 'Настройки' }[name];
   return { key: name, crumbs: [section, item?.label || 'Обзор'].filter(Boolean) };
 }
 

@@ -1,3 +1,4 @@
+import * as assistant from './pages/assistant.js';
 import * as trips from './pages/trips.js';
 import * as appearance from './pages/appearance.js';
 import { route, startRouter, repaint } from './core/router.js';
@@ -24,6 +25,7 @@ route('vedomost', vedomost.render);
 route('documents', documents.render);
 route('appearance', appearance.render);
 route('trips', trips.render);
+route('assistant', assistant.render);
 
 // вернулись со страницы входа Яндекса — забрать токен до запуска роутера
 const auth = handleRedirect();

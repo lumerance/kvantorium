@@ -508,6 +508,23 @@ python3 -m http.server 8000
 «Яндекс.Диск: папка приложения» и «Яндекс ID: логин, имя и фамилия». Redirect URI в настройках
 приложения должен совпадать с адресом сайта (например `https://<логин>.github.io/<репозиторий>/`).
 
+## Помощник (нейросеть GigaChat)
+
+Раздел «Помощник» (боковая панель, «Бумаги»):
+- **Мои данные** — вопросы своими словами: «сколько часов МК осталось?», «когда следующий заезд и будут
+  ли РВ?», «сколько я получу в этом месяце?». Сайт сам считает все цифры (часы по видам работ с
+  остатками, заезды и РВ, зарплату, сохранённые месяцы) и отдаёт модели короткую сводку — модель только
+  находит ответ и формулирует его. ФИО детей в сводку не попадают. Что именно видит помощник — можно
+  раскрыть под полем вопроса.
+- **Мастер-класс** — названия, анонс, идеи и описание для справки по теме, возрасту и длительности,
+  с кнопками «Копировать» и «Другой вариант».
+
+Модель — `ai-sage/GigaChat3.5-432B-A28B` в Cloud.ru (Foundation Models). Ключ Cloud.ru хранится не на
+сайте, а в облачной функции-посреднике — код и пошаговая инструкция в папке [`proxy/`](proxy/README.md).
+Функция пускает только педагогов, вошедших через Яндекс ID и указанных в её настройках, и ограничивает
+число запросов в день. Адрес функции вводится в «Помощник → Настройка». Внизу страницы — расход токенов
+и рублей за месяц на этом устройстве (около 17 ₽ в месяц при активном использовании).
+
 ## Данные
 
 Всё хранится в `localStorage`. На странице «Данные» есть выгрузка полной резервной копии в JSON
@@ -529,11 +546,13 @@ js/
   exporters/  vedomost.js · vedomost-do.js · schedule-docx.js · plan-export.js · payslip.js · payslip-print.js
   core/       store.js · router.js · ui.js · shell.js (боковая панель, верхняя строка) · icons.js · theme.js · appearance.js
               cloud.js (вход через Яндекс, синхронизация с Диском) · account.js (кнопка аккаунта)
+              assistant.js (сводка данных и запросы к помощнику)
+proxy/        assistant-function.js — облачная функция-посредник для GigaChat (Cloud.ru)
   data/       calendar.js · works.js · places.js (коды мест агломераций) · trips.js (план-график заездов)
   pages/      dashboard.js · journal.js · vedomost.js · enroll.js · hours.js
               ktp-panel.js · actual-schedule-panel.js
               salary.js · salary-history.js · vacation.js · vacation-forecast.js · data.js
-              documents.js · agglomeration-finish.js · vedomost-do.js · schedule-gen.js · appearance.js · trips.js
+              documents.js · agglomeration-finish.js · vedomost-do.js · schedule-gen.js · appearance.js · trips.js · assistant.js
 ```
 
 Логотип в `assets/logo.svg` — официальная векторная эмблема «Кванториум-28»; из неё собраны
