@@ -10,6 +10,7 @@ import { cloudState } from '../core/cloud.js';
 import { loginDialog } from '../core/account.js';
 import { askAssistant, assistantUrl, buildSummary, usageThisMonth, usageCost } from '../core/assistant.js';
 import { openMkCert, isMkChat } from './mk-cert.js';
+import { ASSISTANT_URL } from '../config.js';
 
 const CHAT_KEY = 'kvantorium28.chat';
 const SUGGEST = [
@@ -158,14 +159,14 @@ function renderText(text) {
 
 /** Настройка: адрес функции-посредника и просмотр данных, которые видит помощник. */
 function setupDialog(redraw) {
-  const input = h('input', { type: 'url', value: assistantUrl(), placeholder: 'https://functions.yandexcloud.net/…' });
+  const input = h('input', { type: 'url', value: getState().assistant?.url || '', placeholder: ASSISTANT_URL || 'https://functions.yandexcloud.net/…' });
   modal({
     wide: true,
     title: [icon('settings', 18), ' Помощник'],
     body: h('div', {},
       h('p', { class: 'muted', style: { marginTop: 0, fontSize: '13px' } },
         'Помощник работает через облачную функцию-посредника: в ней хранится ключ Cloud.ru, и она пускает только разрешённых педагогов. Как её создать — в файле proxy/README.md репозитория сайта.'),
-      h('label', { class: 'field' }, h('span', {}, 'Адрес функции'), input),
+      h('label', { class: 'field' }, h('span', {}, ASSISTANT_URL ? 'Свой адрес функции (необязательно — общий уже задан)' : 'Адрес функции'), input),
       h('details', { class: 'ai-summary' },
         h('summary', {}, 'Какие данные видит помощник (прикладываются к каждому вопросу)'),
         h('pre', {}, buildSummary()))),
@@ -174,7 +175,7 @@ function setupDialog(redraw) {
       const v = input.value.trim();
       if (v && !/^https:\/\//.test(v)) { toast('Адрес должен начинаться с https://', 'err'); return false; }
       update(x => { x.assistant = { ...(x.assistant || {}), url: v }; });
-      toast(v ? 'Помощник подключён' : 'Адрес удалён'); redraw();
+      toast(v ? 'Помощник подключён' : ASSISTANT_URL ? 'Используется общий адрес' : 'Адрес удалён'); redraw();
     },
   });
 }

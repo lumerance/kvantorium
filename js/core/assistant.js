@@ -4,6 +4,7 @@
 // считает заранее и отдаёт готовой выжимкой. Модели остаётся найти нужную
 // строку и ответить по-человечески — так меньше ошибок и меньше токенов.
 // Личные данные детей (ФИО) в сводку не попадают — только цифры.
+import { ASSISTANT_URL } from '../config.js';
 import { getState, activeAgg, allGroups } from './store.js';
 import { cloudState } from './cloud.js';
 import { MONTHS } from './ui.js';
@@ -114,7 +115,8 @@ export function buildSummary(st = getState()) {
 }
 
 /* ---------------- запрос к посреднику ---------------- */
-export const assistantUrl = (st = getState()) => String(st.assistant?.url || '').trim();
+/** Свой адрес из «Настройки» (если вписан) или общий из js/config.js. */
+export const assistantUrl = (st = getState()) => String(st.assistant?.url || ASSISTANT_URL || '').trim();
 
 function token() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null')?.token || null; } catch { return null; }
