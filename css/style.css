@@ -1184,3 +1184,15 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
   .chat-msg.user .chat-bubble{max-width:88%}
   .chat-foot > .muted:first-child{display:none}
 }
+
+/* ---------- информационная справка о МК ---------- */
+.chat-tool.accent{color:var(--neon)}
+.mkc-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.mkc-cands{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.mkc-cands .check-pill{cursor:pointer;font-size:12.5px}
+.mkc-pick{margin-bottom:8px}
+.mkc-sessions{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.mkc-session{display:grid;grid-template-columns:150px minmax(0,1fr) 28px auto;gap:8px;align-items:center}
+.mkc-wd{font-size:12px}
+.mkc-preview{margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--input-bg);font-size:12.5px}
+@media (max-width:600px){.mkc-session{grid-template-columns:1fr 1fr auto}.mkc-wd{display:none}}

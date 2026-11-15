@@ -474,7 +474,15 @@ python3 -m http.server 8000
   даты и уроки, он заполнит сам) — выше или ниже вашего блока. Затем — предпросмотр,
   где каждую клетку можно поменять (счётчики часов и замечания пересчитываются сразу), кнопка
   «Другой вариант» и выгрузка в Word по образцу. Правки сохраняются как черновик.
-- В подготовке — **справка о проведении мастер-класса** (по шаблону организации).
+- **Информационная справка о мастер-классе (для методиста)** — по шаблону технопарка, одна справка на
+  один МК. Название, цель, аннотацию и возраст заполняет ИИ — по переписке в «Помощнике» (кнопка
+  «Оформить справку» под ответом, если речь шла о мастер-классе; если вариантов несколько — выбираются
+  кнопками) или по введённому названию. Даты и время сайт подбирает сам по расписанию заезда: вы задаёте
+  число проведений и длительность (1–3 урока), а сайт ставит МК сразу после последнего урока педагога
+  в этот день, не позже 13-го урока (19:00), равномерно по заезду; всё можно поправить. Шапка, автор и
+  контакты запоминаются. После скачивания — предложение списать часы на «Проведение мастер-классов»
+  (по 1 ч за урок каждого проведения).
+- В подготовке — **справка о проведении мастер-класса для школы** (по шаблону организации).
 
 ## Оформление
 
@@ -542,7 +550,7 @@ js/
               schedule-build.js — расстановка уроков заезда
               zip-write.js · docx-write.js · xlsx-write.js — генерация .docx и .xlsx
   parsers/    students.js · schedule.js · plan.js · ktp.js
-  exporters/  vedomost.js · vedomost-do.js · schedule-docx.js · plan-export.js · payslip.js · payslip-print.js
+  exporters/  vedomost.js · vedomost-do.js · schedule-docx.js · mk-cert-docx.js · plan-export.js · payslip.js · payslip-print.js
   core/       store.js · router.js · ui.js · shell.js (боковая панель, верхняя строка) · icons.js · theme.js · appearance.js
               cloud.js (вход через Яндекс, синхронизация с Диском) · account.js (кнопка аккаунта)
               assistant.js (сводка данных и запросы к помощнику)
@@ -551,7 +559,7 @@ proxy/        assistant-function.js — облачная функция-поср
   pages/      dashboard.js · journal.js · vedomost.js · enroll.js · hours.js
               ktp-panel.js · actual-schedule-panel.js
               salary.js · salary-history.js · vacation.js · vacation-forecast.js · data.js
-              documents.js · agglomeration-finish.js · vedomost-do.js · schedule-gen.js · appearance.js · trips.js · assistant.js
+              documents.js · agglomeration-finish.js · vedomost-do.js · schedule-gen.js · appearance.js · trips.js · assistant.js · mk-cert.js
 ```
 
 Логотип в `assets/logo.svg` — официальная векторная эмблема «Кванториум-28»; из неё собраны

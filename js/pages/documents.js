@@ -7,6 +7,7 @@ import { getState, viewedAgg } from '../core/store.js';
 import { go } from '../core/router.js';
 import { openVedomostDo } from './vedomost-do.js';
 import { openScheduleGenerator } from './schedule-gen.js';
+import { openMkCert } from './mk-cert.js';
 
 export function render(root) {
   const agg = viewedAgg(getState());
@@ -33,7 +34,12 @@ export function render(root) {
       status: 'Word (.docx)', ready: true, open: () => openScheduleGenerator(),
     },
     {
-      icon: 'award', title: 'Справка о проведении мастер-класса',
+      icon: 'award', title: 'Информационная справка о мастер-классе',
+      text: 'Для методиста: название, цель и аннотацию заполнит ИИ (из чата «Помощника» или по теме), даты и время сайт подберёт по расписанию заезда после ваших уроков.',
+      status: 'Word (.docx)', ready: true, open: () => openMkCert(),
+    },
+    {
+      icon: 'award', title: 'Справка о проведении мастер-класса (для школы)',
       text: 'Справка по шаблону организации: дата, тема, место, число участников — заполняется из ваших данных и сразу уходит в Word.',
       status: 'появится после загрузки шаблона', ready: false,
     },

@@ -9,6 +9,7 @@ import { getState, update } from '../core/store.js';
 import { cloudState } from '../core/cloud.js';
 import { loginDialog } from '../core/account.js';
 import { askAssistant, assistantUrl, buildSummary, usageThisMonth, usageCost } from '../core/assistant.js';
+import { openMkCert, isMkChat } from './mk-cert.js';
 
 const CHAT_KEY = 'kvantorium28.chat';
 const SUGGEST = [
@@ -76,6 +77,10 @@ export function render(root) {
         m.err ? null : h('div', { class: 'chat-tools' },
           h('button', { class: 'chat-tool', type: 'button', title: 'Копировать', onClick: async () => toast(await copyText(m.content) ? 'Скопировано' : 'Не удалось скопировать') }, icon('copy', 14), 'Копировать'),
           isLast ? h('button', { class: 'chat-tool', type: 'button', title: 'Ответить по-другому', onClick: regenerate }, icon('refresh', 14), 'Другой вариант') : null,
+          isMkChat(msgs.slice(0, i + 1)) ? h('button', {
+            class: 'chat-tool accent', type: 'button', title: 'Информационная справка о проведении мастер-класса для методиста',
+            onClick: () => openMkCert({ chat: msgs.slice(0, i + 1).filter(x => !x.err).map(x => ({ role: x.role, content: x.content })) }),
+          }, icon('award', 14), 'Оформить справку') : null,
           m.tokens ? h('span', { class: 'chat-tok' }, `${m.tokens} ток.`) : null)));
   }
 
