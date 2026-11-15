@@ -39,7 +39,7 @@ export function render(root, params = {}) {
     const agg = viewedAgg(st);
     const readOnly = isViewingArchive(st);
     wrap.innerHTML = '';
-    wrap.append(h('div', { class: 'page-head' },
+    wrap.append(h('div', { class: 'page-head head-inline' },
       h('div', {}, h('h1', {}, 'Данные', aggBadge(agg, readOnly)), h('p', {}, 'Импорт документов, сопоставление групп, облачное сохранение и резервные копии.')),
       h('div', { class: 'head-actions' },
         moreMenu([

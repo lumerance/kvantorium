@@ -1271,3 +1271,23 @@ body.page-fit{overflow:hidden}
 /* график «Получено за год»: 12 равных колонок при любой ширине (общий .empty не распирает пустые месяцы) */
 .chart-bars{grid-template-columns:repeat(12,minmax(0,1fr))}
 .chart-col,.chart-col.empty{min-width:0;padding:0 0 22px;text-align:initial}
+
+/* телефон: вкладки «Официальный / Фактический» в один ряд */
+@media (max-width:600px){
+  .tabs.tabs-one-row{flex-wrap:nowrap;display:flex}
+  .tabs.tabs-one-row .tab{flex:1 1 0;min-width:0;justify-content:center;white-space:nowrap}
+}
+/* телефон: списки набора — узкие № и ФИО, чтобы «Договор» и «Навигатор» были видны сразу */
+@media (max-width:600px){
+  .enroll-table th.c-no,.enroll-table td:first-child{width:22px!important;padding-left:6px;padding-right:2px}
+  .enroll-table td:nth-child(2) .cell-input{width:9.5em;min-width:0}
+  .enroll-table th.c-box{width:58px!important;font-size:9.5px;letter-spacing:0;padding-left:2px;padding-right:2px}
+}
+/* телефон: кнопка страницы на одной линии с заголовком (описание — ниже во всю ширину) */
+@media (max-width:600px){
+  .page-head.head-inline{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;row-gap:0}
+  .page-head.head-inline > div:first-child{display:contents}
+  .page-head.head-inline h1{grid-column:1;grid-row:1}
+  .page-head.head-inline > .head-actions{grid-column:2;grid-row:1;margin-left:0}
+  .page-head.head-inline p{grid-column:1 / -1;grid-row:2}
+}

@@ -160,9 +160,9 @@ export function render(root, params = {}) {
         ], { label: 'Выгрузить' }) : null,
       )));
 
-    wrap.append(h('div', { class: 'tabs', style: { marginBottom: '16px' } },
-      h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, icon('list', 16), 'Официальный (ДО)'),
-      h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, icon('pen', 16), 'Фактический (классы)')));
+    wrap.append(h('div', { class: 'tabs tabs-one-row', style: { marginBottom: '16px' } },
+      h('button', { class: 'tab' + (kind === 'official' ? ' active' : ''), onClick: () => { kind = 'official'; redraw(); } }, icon('list', 16), h('span', { class: 'lbl-full' }, 'Официальный (ДО)'), h('span', { class: 'lbl-short' }, 'Официальный')),
+      h('button', { class: 'tab' + (kind === 'actual' ? ' active' : ''), onClick: () => { kind = 'actual'; redraw(); } }, icon('pen', 16), h('span', { class: 'lbl-full' }, 'Фактический (классы)'), h('span', { class: 'lbl-short' }, 'Фактический'))));
 
     if (groupsOf(agg, kind).length) wrap.append(searchCard(kind, searchQuery, (v) => { searchQuery = v; redrawAndReveal(); }));
 
@@ -456,10 +456,10 @@ function groupCard(g, { refresh, reload, refreshTotals, kind, isDO, isOpen, togg
 
   const table = h('div', { class: 'table-wrap' }, h('table', { class: 'compact enroll-table' },
     h('thead', {}, h('tr', {},
-      h('th', { style: { width: '44px' } }, '№'),
-      h('th', {}, 'ФИО'),
-      isDO ? h('th', { style: { width: '90px', textAlign: 'center' } }, 'Договор') : null,
-      isDO ? h('th', { style: { width: '110px', textAlign: 'center' } }, 'Навигатор') : null,
+      h('th', { class: 'c-no', style: { width: '44px' } }, '№'),
+      h('th', { class: 'c-fio' }, 'ФИО'),
+      isDO ? h('th', { class: 'c-box', style: { width: '90px', textAlign: 'center' } }, 'Договор') : null,
+      isDO ? h('th', { class: 'c-box', style: { width: '110px', textAlign: 'center' } }, 'Навигатор') : null,
       h('th', { style: { width: '25%' } }, 'Примечание'),
       h('th', { style: { width: '44px' } }, ''))),
     h('tbody', {}, ...rows)));
