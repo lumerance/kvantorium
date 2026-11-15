@@ -74,16 +74,41 @@ export function parseScheduleDoc(docxData) {
     }
     weeks.push({ index: weekNo, label: weekLabel, tableIndex: ti, days: cols.filter(Boolean) });
 
+    // Дни шапки как отрезки по реальной ширине колонок. Ячейка урока
+    // относится к дню, с которым больше всего пересекается по ширине —
+    // а не к номеру колонки сетки: в некоторых файлах узкая колонка
+    // (17 twip) в шапке входит в пятницу, а в строках уроков — в субботу,
+    // и по сетке субботние уроки засчитывались бы ещё и в пятницу.
+    const gw = table.gridW?.length ? table.gridW : null;
+    const xOf = (col) => (gw ? gw.slice(0, col).reduce((a, w) => a + w, 0) : col);
+    const wOf = (col, span) => xOf(col + span) - xOf(col);
+    const headCells = table.cells?.[dayRowIdx] || null;
+    const dayRanges = headCells ? headCells.filter(c => c.col > 0).map(c => {
+      const raw = norm(c.text);
+      return { x0: xOf(c.col), x1: xOf(c.col) + wOf(c.col, c.span), weekday: WD.find(w => raw.toLowerCase().includes(w)) || '', date: parseDate(raw) };
+    }) : null;
+    const dayOfCell = (c) => {
+      const x0 = xOf(c.col), x1 = x0 + wOf(c.col, c.span);
+      let best = null, bestOv = 0;
+      for (const d of dayRanges) {
+        const ov = Math.min(x1, d.x1) - Math.max(x0, d.x0);
+        if (ov > bestOv) { bestOv = ov; best = d; }
+      }
+      return best;
+    };
+
     let current = { direction: '', teacher: '' };
     for (let i = dayRowIdx + 1; i < rows.length; i++) {
       const row = rows[i];
       if (isTeacherRow(row)) { current = splitTeacher(row[0]); if (current.teacher) teachers.add(current.teacher); continue; }
       const head = lessonHead(row[0]);
       if (!head) continue;
-      for (let j = 1; j < row.length; j++) {
-        const code = norm(row[j]);
+      // по настоящим ячейкам строки (если есть), иначе — по колонкам сетки
+      const items = dayRanges && table.cells?.[i]
+        ? table.cells[i].filter(c => c.col > 0).map(c => ({ code: norm(c.text), col: dayOfCell(c) }))
+        : row.slice(1).map((t, k) => ({ code: norm(t), col: cols[k + 1] }));
+      for (const { code, col } of items) {
         if (!code) continue;
-        const col = cols[j];
         if (!col || !col.date) continue;
         codes.add(code);
         lessons.push({

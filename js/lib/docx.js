@@ -27,9 +27,18 @@ function readTable(tbl) {
   const rowsEls = kids(tbl, 'tr');
   const grid = [];
   const mergedFlags = [];
+  // настоящие ячейки строки с их положением в сетке: {text, col, span} —
+  // нужны там, где в Word колонки «поехали» (узкая служебная колонка
+  // в шапке относится к одному дню, а в строках уроков — к соседнему)
+  const cells = [];
+  const tblGrid = kid(tbl, 'tblGrid');
+  const gridW = tblGrid ? kids(tblGrid, 'gridCol').map(g => parseInt(attr(g, 'w'), 10) || 0) : [];
   rowsEls.forEach((tr, ri) => {
     const row = [];
     const flags = [];
+    const rowCells = [];
+    const trPr = kid(tr, 'trPr');
+    const before = parseInt(trPr && attr(kid(trPr, 'gridBefore'), 'val') || '0', 10) || 0;
     for (const tc of kids(tr, 'tc')) {
       const pr = kid(tc, 'tcPr');
       const span = Math.max(1, parseInt(pr && attr(kid(pr, 'gridSpan'), 'val') || '1', 10) || 1);
@@ -40,14 +49,16 @@ function readTable(tbl) {
         const above = grid[ri - 1];
         if (above && above[row.length] !== undefined) text = above[row.length];
       }
+      rowCells.push({ text, col: before + row.length, span });
       for (let k = 0; k < span; k++) { row.push(text); flags.push(span > 1); }
     }
     grid.push(row);
+    cells.push(rowCells);
     mergedFlags.push(flags);
   });
   const width = Math.max(0, ...grid.map(r => r.length));
   grid.forEach(r => { while (r.length < width) r.push(''); });
-  return { type: 'table', rows: grid, width };
+  return { type: 'table', rows: grid, width, cells, gridW };
 }
 
 /** @returns {Promise<{blocks:Array, paragraphs:string[], tables:Array}>} */
