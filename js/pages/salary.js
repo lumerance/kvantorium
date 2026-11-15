@@ -364,10 +364,9 @@ function renderCalcTab(root) {
           h('span', {}, 'Также работаю по договору ГПХ')),
         h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '12px 0 0' } }, 'Сейчас: ', h('b', { class: 'neon-text' }, formatLabel))),
       h('div', { class: 'card' },
-        h('div', { class: 'card-head' },
-          h('div', {},
-            h('h3', {}, 'Постоянные величины', changed ? h('span', { class: 'dot-changed', title: 'Отличаются от ваших актуальных значений' }) : null),
-            h('div', { class: 'card-sub', style: { marginBottom: '10px' } }, 'Меняются раз в полгода — у каждого педагога свои.')),
+        h('div', { class: 'card-head keep-row', style: { marginBottom: '10px' } },
+          h('div', { style: { minWidth: '0' } },
+            h('h3', { style: { margin: 0 } }, 'Постоянные величины', changed ? h('span', { class: 'dot-changed', title: 'Отличаются от ваших актуальных значений' }) : null)),
           h('div', { class: 'card-tools' },
             h('button', {
               class: 'btn sm ghost icon-btn', title: 'Вернуть актуальные значения', 'aria-label': 'Вернуть актуальные значения',

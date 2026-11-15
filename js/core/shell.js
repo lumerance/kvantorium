@@ -29,7 +29,7 @@ const NAV = [
   { key: 'documents', href: '#/documents', label: 'Документы', icon: 'documents' },
   { key: 'assistant', href: '#/assistant', label: 'Помощник', icon: 'sparkle' },
   { spacer: true },
-  { key: 'data', href: '#/data', label: 'Данные и импорт', icon: 'data' },
+  { key: 'data', href: '#/data', label: 'Данные и импорт', short: 'Данные', icon: 'data' },
   { key: 'appearance', href: '#/appearance', label: 'Оформление', icon: 'palette' },
 ];
 
@@ -41,7 +41,7 @@ function locate(name, params) {
   if (name === 'vedomost') return { key: 'documents', crumbs: ['Документы', 'Итоговая ведомость'] };
   const item = NAV.find(n => n.key === name);
   const section = { enroll: 'Работа с детьми', trips: 'Учёт', hours: 'Учёт', salary: 'Учёт', documents: 'Бумаги', assistant: 'Бумаги', appearance: 'Настройки' }[name];
-  return { key: name, crumbs: [section, item?.label || 'Обзор'].filter(Boolean) };
+  return { key: name, crumbs: [section, item?.label || 'Обзор'].filter(Boolean), short: item?.short || null };
 }
 
 const SIDEBAR_KEY = 'kvantorium28.sidebar';
@@ -160,7 +160,7 @@ export function initShell() {
     sheet.replaceChildren(h('div', { class: 'bn-grip' }), h('div', { class: 'bn-grid' },
       ...NAV.filter(n => n.key && !MAIN.includes(n.key) && (n.key !== 'journal-actual' || showActual)).map(n => h('a', {
         class: 'bn-tile' + (n.key === activeKey ? ' active' : ''), href: n.href, onClick: closeSheet,
-      }, icon(n.icon, 22), h('span', {}, n.label)))));
+      }, icon(n.icon, 22), h('span', {}, n.short || n.label)))));
   };
   moreBtn.addEventListener('click', () => { drawSheet(); app.classList.toggle('sheet-open'); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
@@ -198,7 +198,7 @@ export function initShell() {
   subscribe(syncActual);
 
   window.addEventListener('routechange', (e) => {
-    const { key, crumbs: list } = locate(e.detail.name, e.detail.params);
+    const { key, crumbs: list, short } = locate(e.detail.name, e.detail.params);
     activeKey = key;
     for (const [k, a] of links) {
       a.classList.toggle('active', k === key);
@@ -210,7 +210,9 @@ export function initShell() {
     moreBtn.classList.toggle('active', !MAIN.includes(key));
     crumbs.replaceChildren(...list.flatMap((c, i) => [
       i ? icon('chevron', 14) : null,
-      h('span', { class: i === list.length - 1 ? 'cur' : '' }, c),
+      i === list.length - 1
+        ? h('span', { class: 'cur' }, ...(short ? [h('span', { class: 'lbl-full' }, c), h('span', { class: 'lbl-short' }, short)] : [c]))
+        : h('span', {}, c),
     ]).filter(Boolean));
     document.title = `${list[list.length - 1]} · Кванториум-28`;
   });

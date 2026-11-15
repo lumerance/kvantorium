@@ -1222,3 +1222,15 @@ th.th-sort:hover, th.th-sort.on { color: var(--neon); }
 /* журнал: протягивание кистью */
 .mark { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 body.mark-painting, body.mark-painting * { cursor: crosshair !important; -webkit-user-select: none; user-select: none; }
+
+/* телефон: название раздела в верхней строке не сжимается — сокращается агломерация */
+@media (max-width:600px){
+  .topbar{gap:8px}
+  .tb-crumbs{flex:none}
+  .tb-spacer{flex:1 1 0;min-width:0}
+  .tb-agg{flex:0 1 auto;min-width:0;padding:0 11px}
+  .tb-agg span{flex:1 1 auto;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tb-account{min-width:0;flex:0 1 auto}
+}
+/* заголовок карточки с кнопками справа — в одну строку и на телефоне */
+.card-head.keep-row, .card-head.keep-row.keep-row { flex-direction: row; align-items: center; }
