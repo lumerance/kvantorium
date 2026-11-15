@@ -195,7 +195,7 @@ export function openMkCert({ chat = null } = {}) {
       const roleOnly = f.author.replace(fio, '').trim();
       update(x => {
         x.mkCert = { organizer: f.organizer, contacts: f.contacts, extra: f.extra, count: f.count, len: f.len, authorRole: roleOnly || x.mkCert?.authorRole };
-        x.mkCerts = [{ id: Date.now(), title: f.title, sessions, len: f.len, createdAt: new Date().toISOString() }, ...(x.mkCerts || [])].slice(0, 50);
+        x.mkCerts = [{ id: Date.now(), title: f.title, age: f.age, sessions, len: f.len, createdAt: new Date().toISOString() }, ...(x.mkCerts || [])].slice(0, 50);
       });
       buildMkCertDocx({ ...f, sessions }).then(blob => {
         download(`Информационная справка МК «${f.title.replace(/[\\/:*?"<>|]/g, '')}».docx`, blob);

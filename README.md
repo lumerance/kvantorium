@@ -482,7 +482,11 @@ python3 -m http.server 8000
   в этот день, не позже 13-го урока (19:00), равномерно по заезду; всё можно поправить. Шапка, автор и
   контакты запоминаются. После скачивания — предложение списать часы на «Проведение мастер-классов»
   (по 1 ч за урок каждого проведения).
-- В подготовке — **справка о проведении мастер-класса для школы** (по шаблону организации).
+- **Справка о мастер-классах для школы** — письмо от школы ректору по образцу: слева сверху остаётся
+  место под бланк школы (у каждой своя шапка), справа — адресат. Период, возраст и ваши часы считаются
+  по информационным справкам о МК за выбранный заезд (галочками можно исключить МК); часы других
+  педагогов, число детей и листы приложения вписываются вручную. Адресат, обращение, номер МТ и коллеги
+  запоминаются; директор школы берётся из данных генератора расписания.
 
 ## Оформление
 
@@ -550,7 +554,7 @@ js/
               schedule-build.js — расстановка уроков заезда
               zip-write.js · docx-write.js · xlsx-write.js — генерация .docx и .xlsx
   parsers/    students.js · schedule.js · plan.js · ktp.js
-  exporters/  vedomost.js · vedomost-do.js · schedule-docx.js · mk-cert-docx.js · plan-export.js · payslip.js · payslip-print.js
+  exporters/  vedomost.js · vedomost-do.js · schedule-docx.js · mk-cert-docx.js · mk-school-docx.js · plan-export.js · payslip.js · payslip-print.js
   core/       store.js · router.js · ui.js · shell.js (боковая панель, верхняя строка) · icons.js · theme.js · appearance.js
               cloud.js (вход через Яндекс, синхронизация с Диском) · account.js (кнопка аккаунта)
               assistant.js (сводка данных и запросы к помощнику)
@@ -559,7 +563,7 @@ proxy/        assistant-function.js — облачная функция-поср
   pages/      dashboard.js · journal.js · vedomost.js · enroll.js · hours.js
               ktp-panel.js · actual-schedule-panel.js
               salary.js · salary-history.js · vacation.js · vacation-forecast.js · data.js
-              documents.js · agglomeration-finish.js · vedomost-do.js · schedule-gen.js · appearance.js · trips.js · assistant.js · mk-cert.js
+              documents.js · agglomeration-finish.js · vedomost-do.js · schedule-gen.js · appearance.js · trips.js · assistant.js · mk-cert.js · mk-school.js
 ```
 
 Логотип в `assets/logo.svg` — официальная векторная эмблема «Кванториум-28»; из неё собраны

@@ -8,6 +8,7 @@ import { go } from '../core/router.js';
 import { openVedomostDo } from './vedomost-do.js';
 import { openScheduleGenerator } from './schedule-gen.js';
 import { openMkCert } from './mk-cert.js';
+import { openMkSchool } from './mk-school.js';
 
 export function render(root) {
   const agg = viewedAgg(getState());
@@ -39,9 +40,9 @@ export function render(root) {
       status: 'Word (.docx)', ready: true, open: () => openMkCert(),
     },
     {
-      icon: 'award', title: 'Справка о проведении мастер-класса (для школы)',
-      text: 'Справка по шаблону организации: дата, тема, место, число участников — заполняется из ваших данных и сразу уходит в Word.',
-      status: 'появится после загрузки шаблона', ready: false,
+      icon: 'award', title: 'Справка о мастер-классах для школы',
+      text: 'Письмо от школы ректору: период, возраст, часы каждого педагога и число детей. Слева сверху — место под бланк школы. Ваши часы считаются по информационным справкам за заезд.',
+      status: 'Word (.docx)', ready: true, open: () => openMkSchool(),
     },
   ];
 

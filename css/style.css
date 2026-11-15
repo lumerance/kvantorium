@@ -1196,3 +1196,5 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
 .mkc-wd{font-size:12px}
 .mkc-preview{margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--input-bg);font-size:12.5px}
 @media (max-width:600px){.mkc-session{grid-template-columns:1fr 1fr auto}.mkc-wd{display:none}}
+.mks-teacher{display:grid;grid-template-columns:minmax(0,1fr) 90px auto;gap:8px;align-items:center;margin-bottom:6px;font-size:13.5px}
+.mks-teacher input{text-align:left}
