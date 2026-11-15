@@ -150,19 +150,19 @@ function quickCard(redraw) {
   const btns = QUICK_ACTIONS.map(a => {
     const w = findWork(a.workTitle, a.kind);
     return h('button', {
-      class: 'btn sm', title: w ? w.title : 'Вид работы не найден в плане',
+      type: 'button', class: 'quick-item' + (w ? '' : ' missing'), title: w ? `${w.title} — списать ${a.hours} ч` : 'Вид работы не найден в плане',
       onClick: () => {
         if (!w) return toast('В плане нет подходящего вида работы — добавьте запись вручную', 'err');
         addEntry({ workId: w.id, kind: w.kind, title: w.title, hours: a.hours, note: a.title });
         toast(`Списано ${a.hours} ч: ${a.title}`); redraw();
       }
-    }, `${a.title} · ${a.hours} ч`);
+    }, h('span', { class: 'quick-t' }, a.title), h('span', { class: 'quick-h' }, `${String(a.hours).replace('.', ',')} ч`));
   });
 
   return h('div', { class: 'card' },
     h('h3', {}, 'Быстрые списания'),
     h('div', { class: 'card-sub' }, 'Одна кнопка — одно типовое действие с нормативным объёмом часов.'),
-    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } }, ...btns));
+    h('div', { class: 'quick-list' }, ...btns));
 }
 
 function worksTable(c, redraw) {

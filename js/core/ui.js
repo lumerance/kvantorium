@@ -1,5 +1,17 @@
 // Мелкие помощники интерфейса: DOM, тосты, модалки, зоны загрузки файлов, форматирование.
 
+// replaceChildren/append на сайте пропускают null/undefined/false, как и h():
+// иначе условный элемент (cond ? h(...) : null) выводился текстом «null».
+for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+  for (const name of ['replaceChildren', 'append']) {
+    const orig = proto[name];
+    if (!orig || orig.__skipsNull) continue;
+    const patched = function (...nodes) { return orig.apply(this, nodes.filter(n => n !== null && n !== undefined && n !== false)); };
+    patched.__skipsNull = true;
+    proto[name] = patched;
+  }
+}
+
 export function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
@@ -299,4 +311,27 @@ export function contextMenu(x, y, items) {
   ctxClose = close;
   (menu.querySelector('.menu-item, .ctx-swatch'))?.focus({ preventScroll: true });
   return close;
+}
+
+/**
+ * Карусель на телефоне (≤600px): карточки по одной во всю ширину, листаются
+ * свайпом, снизу точки. На широком экране — обычный ряд/сетка (trackClass).
+ * start — индекс карточки, с которой начать.
+ */
+export function carousel(cards, { trackClass = 'grid cols-3', start = 0 } = {}) {
+  const track = h('div', { class: `${trackClass} shift-carousel` }, ...cards);
+  const dots = h('div', { class: 'carousel-dots', 'aria-hidden': 'true' }, ...cards.map((_, i) => h('button', {
+    type: 'button', tabindex: '-1', class: i === start ? 'on' : '',
+    onClick: () => track.scrollTo({ left: cards[i].offsetLeft - track.offsetLeft, behavior: 'smooth' }),
+  })));
+  let raf = 0;
+  track.addEventListener('scroll', () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
+    });
+  }, { passive: true });
+  if (start) requestAnimationFrame(() => { if (cards[start]) track.scrollLeft = cards[start].offsetLeft - track.offsetLeft; });
+  return h('div', {}, track, dots);
 }

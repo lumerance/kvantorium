@@ -3,7 +3,7 @@
 // независимых набора списка/расписания/сопоставления одной и той же формы;
 // переключаются вкладкой вверху страницы, вся логика ниже общая — просто
 // читает/пишет либо st.* (официальный), либо st.actual.* (фактический).
-import { switchToggle, h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile, aggBadge, moreMenu } from '../core/ui.js';
+import { carousel, switchToggle, h, toast, fileDrop, download, modal, confirmBox, dateRu, emptyState, pickFile, aggBadge, moreMenu } from '../core/ui.js';
 import { icon } from '../core/icons.js';
 import {
   getState, update, resetAll, exportBackup, importBackup, allGroups, keepGroups, removeGroup, removeSubject, filterSchedule, autoMapAll, codeBinding, bindCode,
@@ -597,22 +597,7 @@ function openActualScheduleModal(outerRedraw, readOnly) {
 
 /** Заезды: на компьютере — три колонки, на телефоне — карусель по одному
  *  заезду со свайпом (scroll-snap) и точками-индикатором. */
-function shiftCarousel(cards) {
-  const track = h('div', { class: 'grid cols-3 shift-carousel' }, ...cards);
-  const dots = h('div', { class: 'carousel-dots', 'aria-hidden': 'true' }, ...cards.map((_, i) => h('button', {
-    type: 'button', tabindex: '-1', class: i ? '' : 'on',
-    onClick: () => track.scrollTo({ left: cards[i].offsetLeft - track.offsetLeft, behavior: 'smooth' }),
-  })));
-  let raf = 0;
-  track.addEventListener('scroll', () => {
-    cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(() => {
-      const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-      [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
-    });
-  }, { passive: true });
-  return h('div', {}, track, dots);
-}
+const shiftCarousel = (cards) => carousel(cards);
 
 function scheduleCard(agg, redraw, kind, readOnly) {
   if (kind === 'actual') return actualScheduleRow(agg, redraw, kind, readOnly);

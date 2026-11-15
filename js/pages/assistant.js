@@ -178,6 +178,31 @@ export function render(root) {
       h('div', { class: 'chat-compose' }, input, sendBtn),
       h('div', { class: 'chat-foot' }, h('span', { class: 'muted' }, 'Enter — отправить, Shift+Enter — новая строка. Цифры сайт считает сам; тексты — нейросеть GigaChat, проверяйте их.'), usage)));
   draw(true);
+  return fitChat(root.querySelector('.card.chat'));   // роутер вызовет при уходе со страницы
+}
+
+/** Чат во всю оставшуюся высоту окна: страница не прокручивается, листается только переписка. */
+function fitChat(card) {
+  if (!card) return null;
+  document.body.classList.add('page-fit');
+  const fit = () => {
+    if (!card.isConnected) return;
+    const top = card.getBoundingClientRect().top + window.scrollY;
+    const nav = document.querySelector('.bottom-nav');
+    const navR = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect() : null;
+    const bottom = navR ? window.innerHeight - navR.top + 10 : 16;   // над нижним меню телефона
+    card.style.height = `${Math.max(320, window.innerHeight - top - bottom)}px`;
+  };
+  const off = () => {
+    document.body.classList.remove('page-fit');
+    window.removeEventListener('resize', fit);
+    window.visualViewport?.removeEventListener('resize', fit);
+  };
+  window.addEventListener('resize', fit);
+  window.visualViewport?.addEventListener('resize', fit);
+  requestAnimationFrame(fit);
+  setTimeout(fit, 300);
+  return off;
 }
 
 /** Показ ответа: заголовки «###», списки «-» / «1.», **жирный**, абзацы. */

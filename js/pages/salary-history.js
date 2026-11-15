@@ -3,7 +3,7 @@
 // раскладкой (те же карточки, что и на вкладке расчёта), выгрузку в Word
 // и точную печатную копию официального расчётного листка (печать / PDF).
 import { icon } from '../core/icons.js';
-import { h, money0, toast, download, confirmBox, modal, MONTHS, emptyState, printElement, switchToggle } from '../core/ui.js';
+import { h, carousel, money0, toast, download, confirmBox, modal, MONTHS, emptyState, printElement, switchToggle } from '../core/ui.js';
 import { getState, update } from '../core/store.js';
 import { comparisonCard, detailTableCard, applyBonus, RATE_LABELS } from './salary.js';
 import { buildPayslipDocx } from '../exporters/payslip.js';
@@ -54,12 +54,8 @@ export function render(root) {
 
     wrap.append(chartCard(s.history, years));
 
-    const grid = h('div', {
-      class: 'scroll-x',
-      style: { display: 'flex', gap: '14px', alignItems: 'flex-start', paddingBottom: '4px' },
-    });
-    for (const y of years) grid.append(yearColumn(y, s, redraw));
-    wrap.append(grid);
+    // на компьютере — колонки годов в ряд, на телефоне — карусель по году (с последнего)
+    wrap.append(carousel(years.map(y => yearColumn(y, s, redraw)), { trackClass: 'scroll-x year-row', start: years.length - 1 }));
   }
 
   function yearColumn(year, s, redraw) {
@@ -77,7 +73,7 @@ export function render(root) {
         h('span', { class: 'k' }, MONTHS[m - 1], g?.on ? h('span', { class: 'gph-tag' }, '+ГПХ') : null),
         h('span', { class: entry ? 'v' : 'v muted' }, entry ? money0(receivedOf(entry)) : '—')));
     }
-    return h('div', { class: 'card', style: { flex: '0 0 240px', minWidth: '240px' } },
+    return h('div', { class: 'card year-col' },
       h('h3', {}, String(year), h('span', { class: 'hint' }, ` ${filled}/12`)),
       ...rows,
       filled ? h('div', { class: 'kv total', style: { marginTop: '8px' } },
