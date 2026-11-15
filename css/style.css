@@ -1097,3 +1097,15 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
   .standalone .bn-sheet{bottom:calc(72px + env(safe-area-inset-bottom))}
   .standalone .main{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
 }
+
+/* ---------- заезды на «Данных»: карусель на телефоне ---------- */
+.carousel-dots{display:none}
+@media (max-width:600px){
+  .shift-carousel{display:flex!important;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;
+    scrollbar-width:none;margin:0 -2px;padding:0 2px 2px}
+  .shift-carousel::-webkit-scrollbar{display:none}
+  .shift-carousel > *{flex:0 0 100%;scroll-snap-align:center;scroll-snap-stop:always;min-width:0}
+  .carousel-dots{display:flex;justify-content:center;gap:8px;margin:10px 0 2px}
+  .carousel-dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:var(--line);cursor:pointer;transition:width 200ms var(--ease-out),background-color 200ms ease}
+  .carousel-dots button.on{width:22px;border-radius:4px;background:var(--neon)}
+}

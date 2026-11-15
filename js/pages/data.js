@@ -565,6 +565,25 @@ function openActualScheduleModal(outerRedraw, readOnly) {
   });
 }
 
+/** Заезды: на компьютере — три колонки, на телефоне — карусель по одному
+ *  заезду со свайпом (scroll-snap) и точками-индикатором. */
+function shiftCarousel(cards) {
+  const track = h('div', { class: 'grid cols-3 shift-carousel' }, ...cards);
+  const dots = h('div', { class: 'carousel-dots', 'aria-hidden': 'true' }, ...cards.map((_, i) => h('button', {
+    type: 'button', tabindex: '-1', class: i ? '' : 'on',
+    onClick: () => track.scrollTo({ left: cards[i].offsetLeft - track.offsetLeft, behavior: 'smooth' }),
+  })));
+  let raf = 0;
+  track.addEventListener('scroll', () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
+    });
+  }, { passive: true });
+  return h('div', {}, track, dots);
+}
+
 function scheduleCard(agg, redraw, kind, readOnly) {
   if (kind === 'actual') return actualScheduleRow(agg, redraw, kind, readOnly);
 
@@ -617,7 +636,7 @@ function scheduleCard(agg, redraw, kind, readOnly) {
 
   return h('div', { style: { marginBottom: '16px' } },
     h('h2', { style: { fontSize: '16px', margin: '0 0 10px' } }, '2. Расписание занятий — по одному документу на заезд'),
-    h('div', { class: 'grid cols-3' }, ...cards));
+    shiftCarousel(cards));
 }
 
 function askShift(detected, chosen) {
