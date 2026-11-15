@@ -21,7 +21,7 @@ export function render(root) {
       h('h1', {}, 'Рабочий стол педагога', aggBadge(agg, readOnly)),
       h('p', {}, 'Журнал, часы по индивидуальному плану и расчёт зарплаты — в одном месте. Данные хранятся только в этом браузере.')),
     h('div', { class: 'head-actions' },
-      h('button', { class: 'btn primary', onClick: () => go('data') }, icon('upload', 16), 'Импорт документов'))));
+      h('button', { class: 'btn primary', onClick: () => go('data') }, icon('upload', 16), h('span', { class: 'lbl-full' }, 'Импорт документов'), h('span', { class: 'lbl-short' }, 'Импорт')))));
 
   const groups = allGroups(agg);
   const loadedShifts = SHIFTS.filter(sh => agg.schedules[String(sh)]);

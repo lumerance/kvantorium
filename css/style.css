@@ -1283,11 +1283,13 @@ body.page-fit{overflow:hidden}
   .enroll-table td:nth-child(2) .cell-input{width:9.5em;min-width:0}
   .enroll-table th.c-box{width:58px!important;font-size:9.5px;letter-spacing:0;padding-left:2px;padding-right:2px}
 }
-/* телефон: кнопка страницы на одной линии с заголовком (описание — ниже во всю ширину) */
+/* телефон: если в шапке страницы одна кнопка — она на одной линии с заголовком
+   (описание — ниже во всю ширину). head-inline — то же принудительно. */
 @media (max-width:600px){
-  .page-head.head-inline{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;row-gap:0}
-  .page-head.head-inline > div:first-child{display:contents}
-  .page-head.head-inline h1{grid-column:1;grid-row:1}
-  .page-head.head-inline > .head-actions{grid-column:2;grid-row:1;margin-left:0}
-  .page-head.head-inline p{grid-column:1 / -1;grid-row:2}
+  :is(.page-head.head-inline, .page-head:has(> .head-actions > :only-child)){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;row-gap:0}
+  :is(.page-head.head-inline, .page-head:has(> .head-actions > :only-child)) > div:first-child{display:contents}
+  :is(.page-head.head-inline, .page-head:has(> .head-actions > :only-child)) h1{grid-column:1;grid-row:1;min-width:0}
+  :is(.page-head.head-inline, .page-head:has(> .head-actions > :only-child)) > .head-actions{grid-column:2;grid-row:1;margin-left:0}
+  :is(.page-head.head-inline, .page-head:has(> .head-actions > :only-child)) p{grid-column:1 / -1;grid-row:2}
 }
+@media (max-width:600px){ .page-head h1{line-height:1.15} }
