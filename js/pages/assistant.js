@@ -12,6 +12,9 @@ import { askAssistant, assistantUrl, buildSummary, usageThisMonth, usageCost, is
 import { MONTHS } from '../core/ui.js';
 import { openMkCert, isMkAnswer } from './mk-cert.js';
 import { ASSISTANT_URL } from '../config.js';
+import { extractAction, applyLogHours, undoLogHours, actionNote } from '../core/assistant-actions.js';
+import { worksCatalog } from './hours.js';
+import { go } from '../core/router.js';
 
 const CHAT_KEY = 'kvantorium28.chat';
 const SUGGEST = [
@@ -49,9 +52,10 @@ export function render(root) {
     pending = true;
     draw(true);
     try {
-      const history = msgs.filter(m => !m.err).map(m => ({ role: m.role, content: m.content }));
+      const history = msgs.filter(m => !m.err).map(m => ({ role: m.role, content: m.content + actionNote(m.action) }));
       const r = await askAssistant(history);
-      msgs.push({ role: 'assistant', content: r.text || '(пустой ответ)', tokens: (r.usage?.prompt_tokens || 0) + (r.usage?.completion_tokens || 0) });
+      const { text, action } = extractAction(r.text || '');
+      msgs.push({ role: 'assistant', content: text || (action ? 'Проверьте и подтвердите списание:' : '(пустой ответ)'), action, tokens: (r.usage?.prompt_tokens || 0) + (r.usage?.completion_tokens || 0) });
     } catch (e) {
       msgs.push({ role: 'assistant', content: e.message, err: true });
     }
@@ -75,7 +79,7 @@ export function render(root) {
     return h('div', { class: 'chat-msg bot' + (m.err ? ' err' : '') },
       h('div', { class: 'chat-avatar' }, icon(m.err ? 'alert' : 'sparkle', 16)),
       h('div', { class: 'chat-body' },
-        h('div', { class: 'chat-bubble' }, m.err ? m.content : renderText(m.content)),
+        h('div', { class: 'chat-bubble' }, m.err ? m.content : renderText(m.content), m.action ? actionCard(m) : null),
         m.err ? null : h('div', { class: 'chat-tools' },
           h('button', { class: 'chat-tool', type: 'button', title: 'Копировать', onClick: async () => toast(await copyText(m.content) ? 'Скопировано' : 'Не удалось скопировать') }, icon('copy', 14), 'Копировать'),
           isLast ? h('button', { class: 'chat-tool', type: 'button', title: 'Ответить по-другому', onClick: regenerate }, icon('refresh', 14), 'Другой вариант') : null,
@@ -84,6 +88,48 @@ export function render(root) {
             onClick: () => openMkCert({ chat: msgs.slice(0, i + 1).filter(x => !x.err).map(x => ({ role: x.role, content: x.content })) }),
           }, icon('award', 14), 'Оформить справку') : null,
           m.tokens ? h('span', { class: 'chat-tok' }, `${m.tokens} ток.`) : null)));
+  }
+
+  /** Карточка «Списать часы»: проверить вид работы, часы и дату — и подтвердить. */
+  function actionCard(m) {
+    const a = m.action;
+    const works = worksCatalog();
+    const save = () => saveChat(msgs);
+    const total = () => a.entries.reduce((x, e) => x + (Number(e.hours) || 0), 0);
+    const fmt = (n) => String(Math.round(n * 10) / 10).replace('.', ',');
+    const ddmm = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+    const box = h('div', { class: 'ai-act' + (a.status !== 'pending' ? ' ' + a.status : '') });
+    const paint = () => {
+      const pending = a.status === 'pending';
+      const okToApply = a.entries.length && a.entries.every(e => e.workId && e.hours > 0 && e.date);
+      box.className = 'ai-act' + (pending ? '' : ' ' + a.status);
+      box.replaceChildren(
+        h('div', { class: 'ai-act-head' }, icon('hours', 16), h('b', {}, 'Списать часы'),
+          h('span', { class: 'muted' }, pending ? 'проверьте перед подтверждением' : a.status === 'done' ? 'списано' : 'отменено')),
+        ...a.entries.map((e, k) => pending
+          ? h('div', { class: 'ai-act-row' },
+              h('select', { 'aria-label': 'Вид работы', class: e.workId ? '' : 'bad', onChange: (ev) => { e.workId = ev.target.value; save(); paint(); } },
+                h('option', { value: '', selected: !e.workId }, e.asked ? `Не нашёл «${e.asked}» — выберите вид работы` : 'Выберите вид работы'),
+                ...['teaching', 'method'].map(kind => h('optgroup', { label: kind === 'teaching' ? 'Учебная работа' : 'Методическая работа' },
+                  ...works.filter(w => w.kind === kind).map(w => h('option', { value: w.id, selected: w.id === e.workId }, w.title))))),
+              h('input', { type: 'text', inputmode: 'decimal', 'aria-label': 'Часов', value: fmt(e.hours), onChange: (ev) => { e.hours = Math.max(0, Number(ev.target.value.replace(',', '.')) || 0); save(); paint(); } }),
+              h('span', { class: 'muted' }, 'ч'),
+              h('input', { type: 'date', 'aria-label': 'Дата', value: e.date, onChange: (ev) => { e.date = ev.target.value; save(); paint(); } }),
+              a.entries.length > 1 ? h('button', { type: 'button', class: 'btn sm ghost icon-btn', title: 'Убрать строку', 'aria-label': 'Убрать строку', onClick: () => { a.entries.splice(k, 1); save(); paint(); } }, icon('x', 14)) : null)
+          : h('div', { class: 'ai-act-line' }, `${fmt(e.hours)} ч · ${works.find(w => w.id === e.workId)?.title || e.asked} · ${ddmm(e.date)}${e.note ? ` · ${e.note}` : ''}`)),
+        h('div', { class: 'ai-act-btns' }, ...(pending ? [
+          h('button', {
+            type: 'button', class: 'btn sm primary', disabled: !okToApply || null,
+            onClick: () => { a.ids = applyLogHours(a.entries); a.status = 'done'; save(); paint(); toast(`Списано ${fmt(total())} ч — запись в «Часах по плану»`); },
+          }, icon('check', 14), `Списать ${fmt(total())} ч`),
+          h('button', { type: 'button', class: 'btn sm ghost', onClick: () => { a.status = 'cancel'; save(); paint(); } }, 'Отмена'),
+        ] : a.status === 'done' ? [
+          h('button', { type: 'button', class: 'btn sm ghost', onClick: () => go('hours') }, icon('arrowRight', 14), 'Часы по плану'),
+          h('button', { type: 'button', class: 'btn sm ghost', title: 'Удалить эти записи', onClick: () => { undoLogHours(a.ids); a.status = 'undone'; save(); paint(); toast('Списание отменено'); } }, icon('undo', 14), 'Отменить'),
+        ] : [])));
+    };
+    paint();
+    return box;
   }
 
   function draw(scroll = false) {

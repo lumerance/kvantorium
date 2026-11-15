@@ -5,6 +5,7 @@
 // строку и ответить по-человечески — так меньше ошибок и меньше токенов.
 // Личные данные детей (ФИО) в сводку не попадают — только цифры.
 import { ASSISTANT_URL } from '../config.js';
+import { ACTIONS_PROMPT, worksForPrompt } from './assistant-actions.js';
 import { getState, activeAgg, allGroups } from './store.js';
 import { cloudState } from './cloud.js';
 import { MONTHS } from './ui.js';
@@ -37,6 +38,8 @@ export const SYSTEM = [
   '— Пиши простым живым языком, без штампов («уникальная возможность», «погрузитесь в мир», «увлекательный»), без пафосных метафор и лишних восклицаний.',
   '— Учитывай возраст детей, длительность и оборудование технопарка: ноутбуки, 3D-принтер, VR-очки, наборы для робототехники.',
   '— Точно соблюдай требования к количеству пунктов и объёму. Если не хватает важного (возраст, длительность), сделай разумное допущение и коротко его назови.',
+  '',
+  ACTIONS_PROMPT,
   '',
   'Сокращения: МК — мастер-классы, РВ — работа в выходной день, ГПХ — договор гражданско-правового характера, ДО — дополнительное образование.',
   'Пиши по-русски.',
@@ -148,7 +151,7 @@ export async function askAssistant(history) {
   const url = assistantUrl();
   if (!url) throw new Error('Помощник не подключён — укажите адрес функции: кнопка «Настройка» вверху страницы.');
   if (!cloudState().signedIn || !token()) throw new Error('Чтобы пользоваться помощником, войдите через Яндекс (кнопка «Войти» вверху).');
-  const system = `${SYSTEM}\n\n# СВОДКА ДАННЫХ САЙТА\n${buildSummary()}`;
+  const system = `${SYSTEM}\n\n# СВОДКА ДАННЫХ САЙТА\n${buildSummary()}\n\n${worksForPrompt()}`;
   const messages = [{ role: 'system', content: system }, ...history.slice(-HISTORY).map(m => ({ role: m.role, content: m.content }))];
   let res;
   try {

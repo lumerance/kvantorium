@@ -1234,3 +1234,18 @@ body.mark-painting, body.mark-painting * { cursor: crosshair !important; -webkit
 }
 /* заголовок карточки с кнопками справа — в одну строку и на телефоне */
 .card-head.keep-row, .card-head.keep-row.keep-row { flex-direction: row; align-items: center; }
+
+/* помощник: карточка «Списать часы» */
+.ai-act { margin-top: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--accent-rgb), .35); background: rgba(var(--accent-rgb), .06); display: grid; gap: 8px; }
+.ai-act.cancel, .ai-act.undone { border-color: var(--line); background: transparent; opacity: .75; }
+.ai-act-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.ai-act-head .ico { color: var(--neon); display: grid; }
+.ai-act-head .muted { margin-left: auto; font-size: 12px; }
+.ai-act-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ai-act-row select { flex: 1 1 220px; min-width: 0; }
+.ai-act-row select.bad { border-color: var(--amber, #ffc857); }
+.ai-act-row input[type=text] { width: 64px; text-align: center; }
+.ai-act-row input[type=date] { width: auto; }
+.ai-act-line { font-size: 13px; }
+.ai-act-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-act-btns:empty { display: none; }
