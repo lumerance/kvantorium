@@ -5,6 +5,7 @@ import { getState, update } from '../core/store.js';
 import { WORK_DAYS, YEARS, workDays, yearTotal, isPreliminary } from '../data/calendar.js';
 import * as vacation from './vacation.js';
 import { forecastTile } from './vacation-forecast.js';
+import { tripRvForMonth } from './trips.js';
 import * as salaryHistoryPage from './salary-history.js';
 
 /**
@@ -415,12 +416,12 @@ function renderCalcTab(root) {
       return node;
     };
     wrap.append(h('div', { class: 'grid cols-4 tiles-5', style: { marginBottom: '16px' } },
-      colorable('current', '', statCard(`${formatLabel} · на руки`, money0(r.withGph), 'ваш текущий формат', '')),
+      colorable('current', '', statCard(`${formatLabel} · на руки`, money0(r.withGph),
+        `до НДФЛ ${money0(r.current.gross + (r.hasGph ? p.gph : 0))}`, '')),
       colorable('forecast', '', forecastTile(r.current, fullNet, redraw)),
       colorable('gain', gain >= 0 ? '' : 'magenta', statCard(gain >= 0 ? 'Выгода текущего формата' : 'Проигрыш текущего формата',
         (gain >= 0 ? '+' : '−') + money0(Math.abs(gain)),
         `по сравнению с «${B.label}»`, '')),
-      colorable('gross', 'plain', statCard(`${rateLabel} без НДФЛ`, money0(r.current.gross), `на руки ${money0(r.current.net)}`, 'plain')),
       colorable('rv', 'amber', statCard('Стоимость одного РВ', '+' + money0(r.current.rvMarginalNet),
         `на руки · до НДФЛ +${money0(r.current.rvMarginalGross)}`, 'amber')),
     ));
@@ -462,6 +463,18 @@ function renderCalcTab(root) {
         ? h('p', { class: 'muted', style: { marginTop: '10px', fontSize: '12.5px' } },
             `В календаре за ${MONTHS[s.month - 1]} ${s.year} — ${autoDays} рабочих дней, а введено ${s.workDays}.`)
         : null,
+      (() => {
+        const rvTrips = tripRvForMonth(s.year, s.month);
+        if (!rvTrips.length && !s.rv) return null;
+        const IN = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'][s.month - 1];
+        const list = rvTrips.map(r => `${r.date.slice(8, 10)}.${r.date.slice(5, 7)} — ${r.reason}`).join('; ');
+        return h('p', { class: 'muted trip-hint', style: { marginTop: '10px', fontSize: '12.5px' } }, icon('bus', 15),
+          rvTrips.length ? `По графику заездов в ${IN} — РВ: ${rvTrips.length} (${list}).` : `По графику заездов в ${IN} РВ нет.`,
+          rvTrips.length !== s.rv ? h('button', {
+            class: 'btn sm ghost', style: { marginLeft: '8px' },
+            onClick: () => { update(x => { x.salary.rv = rvTrips.length; }); redraw(); toast(`Подставлено РВ: ${rvTrips.length}`); },
+          }, 'Подставить') : null);
+      })(),
       h('div', { style: { display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: '12px' } },
         h('label', { class: 'check-pill', style: { display: 'inline-flex' } },
           h('input', {

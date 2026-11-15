@@ -1,3 +1,4 @@
+import * as trips from './pages/trips.js';
 import * as appearance from './pages/appearance.js';
 import { route, startRouter } from './core/router.js';
 import { initShell } from './core/shell.js';
@@ -19,6 +20,7 @@ route('data', data.render);
 route('vedomost', vedomost.render);
 route('documents', documents.render);
 route('appearance', appearance.render);
+route('trips', trips.render);
 
 initShell();
 startRouter();

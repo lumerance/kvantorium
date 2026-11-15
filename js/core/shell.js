@@ -21,6 +21,7 @@ const NAV = [
   { key: 'journal-actual', href: '#/journal?kind=actual', label: 'Фактический журнал', icon: 'journalActual' },
   { key: 'enroll', href: '#/enroll', label: 'Набор и классы', icon: 'enroll' },
   { section: 'Учёт' },
+  { key: 'trips', href: '#/trips', label: 'Заезды', icon: 'bus' },
   { key: 'hours', href: '#/hours', label: 'Часы по плану', icon: 'hours' },
   { key: 'salary', href: '#/salary', label: 'Зарплата', icon: 'salary' },
   { section: 'Бумаги' },
@@ -37,7 +38,7 @@ function locate(name, params) {
     : { key: 'journal', crumbs: ['Работа с детьми', 'Журнал'] };
   if (name === 'vedomost') return { key: 'documents', crumbs: ['Документы', 'Итоговая ведомость'] };
   const item = NAV.find(n => n.key === name);
-  const section = { enroll: 'Работа с детьми', hours: 'Учёт', salary: 'Учёт', documents: 'Бумаги', appearance: 'Настройки' }[name];
+  const section = { enroll: 'Работа с детьми', trips: 'Учёт', hours: 'Учёт', salary: 'Учёт', documents: 'Бумаги', appearance: 'Настройки' }[name];
   return { key: name, crumbs: [section, item?.label || 'Обзор'].filter(Boolean) };
 }
 
