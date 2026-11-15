@@ -8,7 +8,8 @@ import { icon } from '../core/icons.js';
 import { getState, update } from '../core/store.js';
 import { cloudState } from '../core/cloud.js';
 import { loginDialog } from '../core/account.js';
-import { askAssistant, assistantUrl, buildSummary, usageThisMonth, usageCost } from '../core/assistant.js';
+import { askAssistant, assistantUrl, buildSummary, usageThisMonth, usageCost, isAssistantAdmin, fetchAssistantStats, tokenCost } from '../core/assistant.js';
+import { MONTHS } from '../core/ui.js';
 import { openMkCert, isMkChat } from './mk-cert.js';
 import { ASSISTANT_URL } from '../config.js';
 
@@ -123,6 +124,7 @@ export function render(root) {
           class: 'btn', type: 'button', title: 'Начать новый чат',
           onClick: () => { if (!msgs.length || pending) return; msgs = []; saveChat(msgs); draw(); input.focus(); },
         }, icon('plus', 16), 'Новый чат'),
+        isAssistantAdmin() ? h('button', { class: 'btn', type: 'button', title: 'Кто сколько пользуется помощником', onClick: statsDialog }, icon('compare', 16), 'Статистика') : null,
         h('button', { class: 'btn icon-btn', type: 'button', title: 'Настройка и данные помощника', 'aria-label': 'Настройка', onClick: () => setupDialog(() => draw()) }, icon('settings', 16)))),
     notes,
     h('div', { class: 'card chat' },
@@ -178,4 +180,44 @@ function setupDialog(redraw) {
       toast(v ? 'Помощник подключён' : ASSISTANT_URL ? 'Используется общий адрес' : 'Адрес удалён'); redraw();
     },
   });
+}
+
+/** Статистика по педагогам: запросы, токены, примерная стоимость (данные — из облачной функции). */
+function statsDialog() {
+  const body = h('div', { class: 'ai-stats' }, h('p', { class: 'muted' }, 'Загружаю…'));
+  modal({ wide: true, title: [icon('compare', 18), ' Статистика помощника'], body, cancelText: 'Закрыть' });
+  const rub = (n) => `${n.toFixed(2).replace('.', ',')} ₽`;
+  const monthName = (m) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+  let cur = null;
+  fetchAssistantStats().then((data) => {
+    if (!data.enabled) {
+      body.replaceChildren(h('p', { class: 'muted' }, 'Статистика ещё не включена в облачной функции: нужен бакет Object Storage (переменная STATS_BUCKET) и сервисный аккаунт с ролью storage.editor. Пошагово — в proxy/README.md, раздел «Статистика».'));
+      return;
+    }
+    const months = Object.keys(data.months).sort().reverse();
+    cur = months[0];
+    const draw = () => {
+      const rows = Object.entries(data.months[cur] || {}).map(([login, u]) => ({ login, ...u, cost: tokenCost(u.in || 0, u.out || 0) })).sort((a, b) => b.n - a.n);
+      const silent = (data.allowed || []).filter(l => !rows.some(r => r.login === l));
+      const total = rows.reduce((a, r) => ({ n: a.n + r.n, cost: a.cost + r.cost }), { n: 0, cost: 0 });
+      const max = Math.max(1, ...rows.map(r => r.n));
+      body.replaceChildren(
+        h('div', { class: 'tabs', role: 'tablist', style: { marginBottom: '12px' } }, ...months.map(m => h('button', { type: 'button', class: 'tab' + (m === cur ? ' active' : ''), onClick: () => { cur = m; draw(); } }, monthName(m)))),
+        rows.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'compact' },
+          h('thead', {}, h('tr', {}, h('th', {}, '#'), h('th', {}, 'Педагог (логин)'), h('th', { class: 'num' }, 'Запросов'), h('th', {}, ''), h('th', { class: 'num' }, 'Токенов'), h('th', { class: 'num' }, '≈ Стоимость'), h('th', {}, 'Последний'))),
+          h('tbody', {}, ...rows.map((r, i) => h('tr', {},
+            h('td', { class: 'muted mono' }, i + 1), h('td', {}, h('b', {}, r.login)),
+            h('td', { class: 'num mono' }, r.n),
+            h('td', { style: { width: '30%' } }, h('div', { class: 'ai-bar' }, h('i', { style: `width:${(r.n / max) * 100}%` }))),
+            h('td', { class: 'num mono muted' }, ((r.in || 0) + (r.out || 0)).toLocaleString('ru-RU')),
+            h('td', { class: 'num mono' }, rub(r.cost)),
+            h('td', { class: 'muted', style: { fontSize: '12px' } }, r.last ? new Date(r.last).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')))),
+          h('tfoot', {}, h('tr', {}, h('td', {}), h('td', {}, 'Всего'), h('td', { class: 'num mono' }, total.n), h('td', {}), h('td', {}), h('td', { class: 'num mono' }, rub(total.cost)), h('td', {})))))
+          : h('p', { class: 'muted' }, 'В этом месяце запросов не было.'),
+        silent.length ? h('p', { class: 'muted', style: { fontSize: '12.5px', marginTop: '10px' } }, `Не пользовались: ${silent.join(', ')}`) : null,
+        h('p', { class: 'muted', style: { fontSize: '12px', marginTop: '8px' } }, 'Стоимость — оценка по тарифу модели; точная сумма — в личном кабинете Cloud.ru.'),
+      );
+    };
+    draw();
+  }).catch(e => body.replaceChildren(h('p', { class: 'sg-issues' }, icon('alert', 15), e.message)));
 }

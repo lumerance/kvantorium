@@ -14,12 +14,15 @@
 //   ALLOWED_ORIGIN   — адрес сайта, например https://lumerance.github.io (по умолчанию *)
 //   MODEL            — модель (по умолчанию ai-sage/GigaChat3.5-432B-A28B)
 //   DAILY_LIMIT      — запросов в сутки на педагога (по умолчанию 150)
+//   STATS_BUCKET     — бакет Object Storage для статистики (необязательно; см. README)
+//   ADMIN_LOGINS     — кто видит статистику (по умолчанию — первый логин из ALLOWED_LOGINS)
 
 const API = 'https://foundation-models.api.cloud.ru/v1/chat/completions';
 const MODEL = process.env.MODEL || 'ai-sage/GigaChat3.5-432B-A28B';
 const ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 const DAILY_LIMIT = Number(process.env.DAILY_LIMIT) || 150;
 const MAX_CHARS = 24000;          // на весь запрос (~8 тыс. токенов)
+const STATS_BUCKET = process.env.STATS_BUCKET || '';
 
 // режимы: chat — общий чат сайта (и вопросы по данным, и мастер-классы),
 // data / creative — на случай отдельных запросов
@@ -52,13 +55,38 @@ async function loginOf(token) {
   return login || null;
 }
 
+/* ---------- статистика: Object Storage, файл stats/ГГГГ-ММ.json ----------
+ * { logins: { login: { n, in, out, last, days: { 'ДД': n } } } }
+ * Доступ — IAM-токеном сервисного аккаунта функции (context.token), роль
+ * storage.editor на бакет. Без STATS_BUCKET статистика просто не ведётся. */
+const statsUrl = (month) => `https://storage.yandexcloud.net/${STATS_BUCKET}/stats/${month}.json`;
+async function readStats(month, iam) {
+  const r = await fetch(statsUrl(month), { headers: { Authorization: `Bearer ${iam}` } });
+  if (r.status === 404) return { logins: {} };
+  if (!r.ok) throw new Error(`Object Storage: ${r.status}`);
+  return r.json();
+}
+async function writeStats(month, data, iam) {
+  const r = await fetch(statsUrl(month), { method: 'PUT', headers: { Authorization: `Bearer ${iam}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error(`Object Storage: ${r.status}`);
+}
+async function recordUsage(login, usage, iam) {
+  const now = new Date();
+  const month = now.toISOString().slice(0, 7), day = now.toISOString().slice(8, 10);
+  const data = await readStats(month, iam);
+  const u = (data.logins[login] ||= { n: 0, in: 0, out: 0, days: {} });
+  u.n += 1; u.in += usage?.prompt_tokens || 0; u.out += usage?.completion_tokens || 0;
+  u.days[day] = (u.days[day] || 0) + 1; u.last = now.toISOString();
+  await writeStats(month, data, iam);
+}
+
 const header = (event, name) => {
   const hs = event.headers || {};
   const key = Object.keys(hs).find(k => k.toLowerCase() === name);
   return key ? hs[key] : '';
 };
 
-module.exports.handler = async (event) => {
+module.exports.handler = async (event, context) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
   if (event.httpMethod !== 'POST') return reply(405, { error: 'Только POST' });
   if (!process.env.CLOUDRU_API_KEY) return reply(500, { error: 'В функции не задан CLOUDRU_API_KEY' });
@@ -75,6 +103,22 @@ module.exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : (event.body || '{}')); }
   catch { return reply(400, { error: 'Некорректный запрос' }); }
+  const admins = String(process.env.ADMIN_LOGINS || allowed[0] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const isAdmin = admins.includes(login);
+  const iam = context?.token?.access_token || '';
+
+  // статистика — только для владельца
+  if (body.mode === 'stats') {
+    if (!isAdmin) return reply(403, { error: 'Статистика доступна только владельцу помощника (ADMIN_LOGINS).' });
+    if (!STATS_BUCKET || !iam) return reply(200, { enabled: false, months: {} });
+    const now = new Date();
+    const months = [0, 1, 2].map(k => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 1)).toISOString().slice(0, 7));
+    const out = {};
+    try { for (const m of months) out[m] = (await readStats(m, iam)).logins || {}; }
+    catch (e) { return reply(502, { error: `Статистика: ${e.message}` }); }
+    return reply(200, { enabled: true, months: out, allowed, model: MODEL });
+  }
+
   const mode = MODES[body.mode] ? body.mode : 'chat';
   const messages = Array.isArray(body.messages) ? body.messages.slice(-20) : [];
   if (!messages.length || messages.some(m => !['system', 'user', 'assistant'].includes(m?.role) || typeof m.content !== 'string')) {
@@ -108,5 +152,7 @@ module.exports.handler = async (event) => {
   }
   const j = await r.json();
   const text = j.choices?.[0]?.message?.content || '';
-  return reply(200, { text, usage: j.usage || null, model: MODEL, mode });
+  if (STATS_BUCKET && iam) await recordUsage(login, j.usage, iam).catch(e => console.error('stats', e.message));
+  console.log(JSON.stringify({ login, mode, in: j.usage?.prompt_tokens || 0, out: j.usage?.completion_tokens || 0 }));
+  return reply(200, { text, usage: j.usage || null, model: MODEL, mode, admin: isAdmin || undefined });
 };

@@ -164,5 +164,29 @@ export async function askAssistant(history) {
   try { data = await res.json(); } catch { /* не JSON */ }
   if (!res.ok) throw new Error(data?.error || `Помощник ответил ошибкой ${res.status}`);
   addUsage(data.usage);
+  try { if (data.admin) localStorage.setItem(ADMIN_KEY, '1'); else localStorage.removeItem(ADMIN_KEY); } catch { /* */ }
+  return data;
+}
+
+/* ---------------- статистика (только владельцу помощника) ---------------- */
+const ADMIN_KEY = 'kvantorium28.aiAdmin';
+/** Владелец ли (функция отмечает это в ответах) — чтобы показать кнопку «Статистика». */
+export const isAssistantAdmin = () => { try { return localStorage.getItem(ADMIN_KEY) === '1'; } catch { return false; } };
+export const tokenCost = (inT, outT) => (inT / 1e6) * PRICE.in + (outT / 1e6) * PRICE.out;
+
+/** {enabled, months: {'ГГГГ-ММ': {login: {n, in, out, last, days}}}, allowed} */
+export async function fetchAssistantStats() {
+  const url = assistantUrl();
+  if (!url || !token()) throw new Error('Войдите через Яндекс');
+  let res;
+  try {
+    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Yandex-Token': token() }, body: JSON.stringify({ mode: 'stats', messages: [{ role: 'user', content: '-' }] }) });
+  } catch (e) { throw new Error(`Помощник недоступен (${e.message})`); }
+  let data = null;
+  try { data = await res.json(); } catch { /* */ }
+  if (!res.ok) {
+    if (res.status === 403) { try { localStorage.removeItem(ADMIN_KEY); } catch { /* */ } }
+    throw new Error(data?.error || `Ошибка ${res.status}`);
+  }
   return data;
 }
