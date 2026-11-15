@@ -19,7 +19,7 @@ import { go } from '../core/router.js';
 import { openFinishDialog, confirmReopen } from './agglomeration-finish.js';
 import { placeOfAgg } from '../data/places.js';
 import { cloudState, syncNow, accountShort, onCloud } from '../core/cloud.js';
-import { publishShare, unpublishShare } from '../core/share.js';
+import { publishShare, unpublishShare, shareLocal } from '../core/share.js';
 import { copyText } from '../core/ui.js';
 import { loginDialog } from '../core/account.js';
 
@@ -114,7 +114,7 @@ function shareCard(redraw) {
     if (sharing) return;
     sharing = true; redraw();
     try {
-      if (on) { await publishShare({ force: true }); toast('Группы опубликованы. Скопируйте ссылку и отправьте коллеге'); }
+      if (on) { await publishShare({ force: true, enable: true }); toast('Группы опубликованы. Скопируйте ссылку и отправьте коллеге'); }
       else { await unpublishShare(); toast('Публикация отменена — ссылка больше не работает'); }
     } catch (e) { console.error(e); toast('Не получилось: ' + e.message, 'err', 6000); }
     sharing = false; redraw();
@@ -124,7 +124,7 @@ function shareCard(redraw) {
       switchToggle(!!sh.enabled, 'Делиться группами с коллегами', (v) => turn(v), { title: 'Коллега сможет вставить ссылку в генератор расписания' }),
       sharing ? h('span', { class: 'muted', style: { fontSize: '12.5px' } }, 'Подождите…') : null),
     h('p', { class: 'muted', style: { margin: '6px 0 0', fontSize: '12.5px' } }, sh.enabled
-      ? `По ссылке видны только коды групп, часы на заезды и ваши составленные расписания — без детей и оценок. Обновляется сама после правок${sh.publishedAt ? ` (последний раз: ${new Date(sh.publishedAt).toLocaleString('ru-RU')})` : ''}.`
+      ? `По ссылке видны только коды групп, часы на заезды и ваши составленные расписания — без детей и оценок. Обновляется сама после правок${shareLocal().publishedAt ? ` (последний раз: ${new Date(shareLocal().publishedAt).toLocaleString('ru-RU')})` : ''}.`
       : 'Коллега вставит вашу ссылку один раз в «Расписание занятий» — и в его Word будет и ваш блок уроков. Публикуются только коды групп, часы и расписания, без детей.'),
     sh.enabled && sh.url ? h('div', { class: 'share-link' },
       h('input', { type: 'text', readonly: true, value: sh.url, onFocus: (e) => e.target.select(), 'aria-label': 'Ссылка для коллеги' }),

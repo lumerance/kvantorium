@@ -51,7 +51,6 @@ export function buildSharePayload(st = getState()) {
 }
 
 /* ---------------- публикация ---------------- */
-let busy = false;
 
 async function listOwn() {
   const out = [];
@@ -69,15 +68,33 @@ async function pool(tasks, n = 6) {
   await Promise.all(Array.from({ length: Math.min(n, tasks.length) }, async () => { while (i < tasks.length) await tasks[i++](); }));
 }
 
-/** Выложить актуальные данные (если изменились) и вернуть публичную ссылку. */
-export async function publishShare({ force = false } = {}) {
-  if (busy || !cloudState().signedIn) return getState().share?.url || null;
-  busy = true;
-  try {
+// В общих (синхронизируемых) данных — только {enabled, url}: это выбор
+// педагога. Версия и время публикации — служебные, у каждого устройства
+// свои (localStorage), иначе каждая автопубликация меняла бы общие данные
+// и синхронизация видела бы правки «с двух сторон».
+const LOCAL_KEY = 'kvantorium28.shareLocal';
+export const shareLocal = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}') || {}; } catch { return {}; } };
+const setLocal = (v) => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(v)); } catch { /* */ } };
+const isOn = () => !!getState().share?.enabled;
+
+// операции с Диском идут строго по очереди: выключение дождётся
+// автопубликации, начатой раньше, и та не включит тумблер обратно
+let queue = Promise.resolve();
+const enqueue = (fn) => { const run = queue.then(fn, fn); queue = run.catch(() => null); return run; };
+
+/**
+ * Выложить актуальные данные (если изменились) и вернуть публичную ссылку.
+ * enable: true — включение тумблером; иначе (автообновление) работает,
+ * только пока публикация включена, и само её не включает.
+ */
+export function publishShare({ force = false, enable = false } = {}) {
+  return enqueue(async () => {
+    if (!cloudState().signedIn) return null;
+    if (!enable && !isOn()) return null;
     const json = JSON.stringify({ ...buildSharePayload(), updatedAt: undefined });
     const ver = fnv(json);
     const st = getState();
-    if (!force && st.share?.ver === ver && st.share?.url) return st.share.url;
+    if (!force && shareLocal().ver === ver && st.share?.url) return st.share.url;
     const data = toUrl64((await pack(JSON.stringify(buildSharePayload()))));
     const n = Math.max(1, Math.ceil(data.length / PART));
     let names = await listOwn();
@@ -92,38 +109,54 @@ export async function publishShare({ force = false } = {}) {
       const r = await diskApi(`/resources?${q(`${ROOT}/${w}`)}`, { method: 'PUT' });
       if (!r.ok && r.status !== 409) throw new Error(`Яндекс.Диск (запись): ${r.status}`);
     }));
-    // публикация папки (один раз) и ссылка
-    let url = st.share?.url;
-    if (!url) {
+    // публикация папки и ссылка (папка могла быть снята с публикации на другом устройстве)
+    let url = st.share?.url || null;
+    const meta = await diskApi(`/resources?${q(ROOT)}&fields=public_url`);
+    const pub = meta.ok ? (await meta.json()).public_url : null;
+    if (!pub) {
       const p = await diskApi(`/resources/publish?${q(ROOT)}`, { method: 'PUT' });
       if (!p.ok) throw new Error(`Яндекс.Диск (публикация): ${p.status}`);
-      const m = await diskApi(`/resources?${q(ROOT)}&fields=public_url,public_key`);
+      const m = await diskApi(`/resources?${q(ROOT)}&fields=public_url`);
       url = (await m.json()).public_url;
       if (!url) throw new Error('Яндекс.Диск не выдал публичную ссылку');
-    }
+    } else url = pub;
     // старые версии — удалить (после записи новой: читатель всегда найдёт целую)
     const old = names.filter(nm => !nm.startsWith(ver + '.'));
     await pool(old.map(nm => () => diskApi(`/resources?${q(`${ROOT}/${nm}`)}&permanently=true`, { method: 'DELETE' }).catch(() => null)));
-    update(x => { x.share = { ...(x.share || {}), enabled: true, url, ver, publishedAt: new Date().toISOString() }; });
+    setLocal({ ver, publishedAt: new Date().toISOString() });
+    // общие данные меняются, только если что-то действительно поменялось
+    const cur = getState().share || {};
+    if (!enable && !cur.enabled) return url;      // выключили, пока шла публикация — не включать обратно
+    if (cur.enabled !== true || cur.url !== url || Object.keys(cur).some(k => k !== 'enabled' && k !== 'url')) {
+      update(x => { x.share = { enabled: true, url }; });
+    }
     return url;
-  } finally { busy = false; }
+  });
 }
 
 /** Отменить публикацию: ссылка перестанет работать. */
-export async function unpublishShare() {
-  if (cloudState().signedIn) {
+export function unpublishShare() {
+  // сначала — выбор педагога (сразу и для синхронизации), потом Диск
+  update(x => { x.share = { enabled: false }; });
+  setLocal({});
+  return enqueue(async () => {
+    if (!cloudState().signedIn) return;
     await diskApi(`/resources/unpublish?${q(ROOT)}`, { method: 'PUT' }).catch(() => null);
     await diskApi(`/resources?${q(ROOT)}&permanently=true`, { method: 'DELETE' }).catch(() => null);
-  }
-  update(x => { x.share = { enabled: false }; });
+  });
 }
 
 /** Автообновление опубликованных данных после правок (раз в ~20 с). */
 export function initShare() {
+  // старые версии хранили ver/publishedAt в общих данных — убрать
+  const sh = getState().share;
+  if (sh && Object.keys(sh).some(k => k !== 'enabled' && k !== 'url')) {
+    update(x => { x.share = sh.enabled ? { enabled: true, url: sh.url || null } : { enabled: false }; });
+  }
   let t = null;
   const kick = () => {
-    if (!getState().share?.enabled || !cloudState().signedIn) return;
     clearTimeout(t);
+    if (!isOn() || !cloudState().signedIn) return;
     t = setTimeout(() => publishShare().catch(e => console.warn('share', e)), 20000);
   };
   subscribe(kick);
