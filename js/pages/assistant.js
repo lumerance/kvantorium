@@ -1,159 +1,132 @@
-// «Помощник»: вопросы по своим данным (часы, заезды, РВ, зарплата) и
-// генератор для мастер-классов (названия, анонс, идеи, текст для справки).
-// Модель — GigaChat3.5 в Cloud.ru через посредника (proxy/assistant-function.js).
-import { h, toast, copyText, modal, switchToggle } from '../core/ui.js';
+// «Помощник» — чат с нейросетью GigaChat (Cloud.ru, через посредника
+// proxy/assistant-function.js). В одном чате — и вопросы о своих данных
+// (часы, заезды, РВ, зарплата: цифры сайт считает сам и прикладывает
+// сводку к каждому вопросу), и помощь с мастер-классами.
+// Переписка хранится на этом устройстве (localStorage).
+import { h, toast, copyText, modal } from '../core/ui.js';
 import { icon } from '../core/icons.js';
 import { getState, update } from '../core/store.js';
 import { cloudState } from '../core/cloud.js';
 import { loginDialog } from '../core/account.js';
 import { askAssistant, assistantUrl, buildSummary, usageThisMonth, usageCost } from '../core/assistant.js';
 
-const QUICK = [
+const CHAT_KEY = 'kvantorium28.chat';
+const SUGGEST = [
   'Сколько часов МК у меня осталось?',
   'Что ещё не закрыто по методическим часам?',
   'Когда следующий заезд и будут ли РВ?',
   'Сколько я получу в этом месяце?',
-  'Сколько РВ в этом месяце по графику?',
+  'Придумай 5 названий мастер-класса по робототехнике для 5 класса',
+  'Предложи 3 идеи мастер-класса на стыке VR и истории для 7 класса',
 ];
 
-const CREATIVE_KINDS = [
-  { key: 'titles', label: 'Названия', prompt: (f) => `Придумай 7 названий для мастер-класса. ${ctx(f)}\nТребования: названия короткие (до 5 слов), цепляющие, по теме, не повторяют друг друга по смыслу. Только список.` },
-  { key: 'announce', label: 'Анонс', prompt: (f) => `Напиши анонс мастер-класса${f.title ? ` «${f.title}»` : ''} для школьной группы ВКонтакте. ${ctx(f)}\nОбъём — 4–5 предложений. Просто и по делу, без пафоса. В конце — призыв записаться.` },
-  { key: 'ideas', label: 'Идеи', prompt: (f) => `Предложи 3 идеи мастер-класса. ${ctx(f)}\nДля каждой: название; что дети делают по шагам (3–4 шага); что уносят с собой; какое оборудование нужно.` },
-  { key: 'report', label: 'Для справки', prompt: (f) => `Напиши описание проведённого мастер-класса${f.title ? ` «${f.title}»` : ''} для справки о проведении. ${ctx(f)}\nНужны: цель, задачи (3 пункта), краткое содержание, результат. Официальный стиль без воды, до 150 слов.` },
-];
-function ctx(f) {
-  return [f.topic && `Тема или направление: ${f.topic}.`, f.age && `Участники: ${f.age}.`, f.duration && `Длительность: ${f.duration}.`, f.extra && `Пожелания: ${f.extra}.`]
-    .filter(Boolean).join(' ');
-}
-
-// история ответов — на этом устройстве, в рамках вкладки
-const session = { data: [], creative: [] };
+const loadChat = () => { try { return JSON.parse(localStorage.getItem(CHAT_KEY) || '[]'); } catch { return []; } };
+const saveChat = (msgs) => { try { localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-60))); } catch { /* без памяти */ } };
 
 export function render(root) {
-  const wrap = h('div', {});
-  root.append(wrap);
-  let tab = 'data';
-  const form = { kind: 'ideas', topic: '', age: '', duration: '', title: '', extra: '' };
+  let msgs = loadChat();          // [{role:'user'|'assistant', content, err?, tokens?}]
+  let pending = false;
 
-  function draw() {
+  const list = h('div', { class: 'chat-list', role: 'log', 'aria-live': 'polite' });
+  const input = h('textarea', { class: 'chat-input', rows: 1, placeholder: 'Сообщение помощнику…', 'aria-label': 'Сообщение' });
+  const sendBtn = h('button', { class: 'btn primary chat-send', type: 'button', title: 'Отправить (Enter)', 'aria-label': 'Отправить' }, icon('arrowUp', 18));
+  const notes = h('div', {});
+  const usage = h('span', { class: 'muted chat-usage' });
+
+  const grow = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 180) + 'px'; };
+  input.addEventListener('input', grow);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+  sendBtn.addEventListener('click', () => send());
+
+  async function send(text) {
+    const q = (text ?? input.value).trim();
+    if (!q || pending) return;
+    input.value = ''; grow();
+    msgs.push({ role: 'user', content: q });
+    pending = true;
+    draw(true);
+    try {
+      const history = msgs.filter(m => !m.err).map(m => ({ role: m.role, content: m.content }));
+      const r = await askAssistant(history);
+      msgs.push({ role: 'assistant', content: r.text || '(пустой ответ)', tokens: (r.usage?.prompt_tokens || 0) + (r.usage?.completion_tokens || 0) });
+    } catch (e) {
+      msgs.push({ role: 'assistant', content: e.message, err: true });
+    }
+    pending = false;
+    saveChat(msgs);
+    draw(true);
+    input.focus();
+  }
+
+  async function regenerate() {
+    if (pending) return;
+    // убрать последний ответ и спросить заново
+    while (msgs.length && msgs[msgs.length - 1].role === 'assistant') msgs.pop();
+    const last = msgs.pop();
+    if (last) await send(last.content);
+  }
+
+  function bubble(m, i) {
+    const isLast = i === msgs.length - 1;
+    if (m.role === 'user') return h('div', { class: 'chat-msg user' }, h('div', { class: 'chat-bubble' }, m.content));
+    return h('div', { class: 'chat-msg bot' + (m.err ? ' err' : '') },
+      h('div', { class: 'chat-avatar' }, icon(m.err ? 'alert' : 'sparkle', 16)),
+      h('div', { class: 'chat-body' },
+        h('div', { class: 'chat-bubble' }, m.err ? m.content : renderText(m.content)),
+        m.err ? null : h('div', { class: 'chat-tools' },
+          h('button', { class: 'chat-tool', type: 'button', title: 'Копировать', onClick: async () => toast(await copyText(m.content) ? 'Скопировано' : 'Не удалось скопировать') }, icon('copy', 14), 'Копировать'),
+          isLast ? h('button', { class: 'chat-tool', type: 'button', title: 'Ответить по-другому', onClick: regenerate }, icon('refresh', 14), 'Другой вариант') : null,
+          m.tokens ? h('span', { class: 'chat-tok' }, `${m.tokens} ток.`) : null)));
+  }
+
+  function draw(scroll = false) {
     const st = getState();
     const configured = !!assistantUrl(st);
     const signedIn = cloudState().signedIn;
-    const u = usageThisMonth();
-
-    const kids = [
-      h('div', { class: 'page-head' },
-        h('div', {}, h('h1', {}, 'Помощник'),
-          h('p', {}, 'Спросите о своих часах, заездах и зарплате или попросите придумать мастер-класс. Ответы — нейросеть GigaChat; числа сайт считает сам.')),
-        h('div', { class: 'head-actions' },
-          h('button', { class: 'btn', type: 'button', onClick: () => setupDialog(draw) }, icon('settings', 16), 'Настройка'))),
-
+    notes.replaceChildren(...[
       !configured ? h('div', { class: 'card ai-note' }, icon('alert', 18),
-        h('div', {}, h('b', {}, 'Помощник ещё не подключён. '),
-          'Нужен адрес облачной функции-посредника (её код — в папке proxy репозитория сайта). Нажмите «Настройка».')) : null,
+        h('div', {}, h('b', {}, 'Помощник ещё не подключён. '), 'Нужен адрес облачной функции-посредника (код и инструкция — в папке proxy репозитория сайта).'),
+        h('button', { class: 'btn', type: 'button', onClick: () => setupDialog(() => draw()) }, icon('settings', 16), 'Настройка')) : null,
       configured && !signedIn ? h('div', { class: 'card ai-note' }, icon('user', 18),
         h('div', {}, h('b', {}, 'Войдите через Яндекс. '), 'Помощник отвечает только педагогам, вошедшим на сайт.'),
         h('button', { class: 'btn primary', type: 'button', onClick: () => loginDialog() }, icon('cloud', 16), 'Войти')) : null,
+    ].filter(Boolean));
 
-      h('div', { class: 'tabs', style: { marginBottom: '14px' } },
-        h('button', { class: 'tab' + (tab === 'data' ? ' active' : ''), type: 'button', onClick: () => { tab = 'data'; draw(); } }, icon('hours', 16), 'Мои данные'),
-        h('button', { class: 'tab' + (tab === 'creative' ? ' active' : ''), type: 'button', onClick: () => { tab = 'creative'; draw(); } }, icon('award', 16), 'Мастер-класс')),
+    const items = msgs.map(bubble);
+    if (pending) items.push(h('div', { class: 'chat-msg bot' }, h('div', { class: 'chat-avatar' }, icon('sparkle', 16)),
+      h('div', { class: 'chat-body' }, h('div', { class: 'chat-bubble chat-typing', 'aria-label': 'Помощник печатает' }, h('i'), h('i'), h('i')))));
+    if (!msgs.length && !pending) {
+      items.push(h('div', { class: 'chat-empty' },
+        h('div', { class: 'chat-empty-ico' }, icon('sparkle', 26)),
+        h('p', {}, 'Спросите о своих часах, заездах и зарплате — или попросите придумать мастер-класс.'),
+        h('div', { class: 'chat-suggest' }, ...SUGGEST.map(q => h('button', { type: 'button', class: 'check-pill', onClick: () => send(q) }, q)))));
+    }
+    list.replaceChildren(...items);
+    sendBtn.disabled = pending;
 
-      tab === 'data' ? dataPane() : creativePane(),
-
-      h('p', { class: 'muted ai-usage' },
-        `В этом месяце на этом устройстве: ${u.n} ${u.n % 10 === 1 && u.n % 100 !== 11 ? 'запрос' : 'запросов'}, ` +
-        `${(u.in + u.out).toLocaleString('ru-RU')} токенов ≈ ${usageCost(u).toFixed(2).replace('.', ',')} ₽.`)];
-    wrap.replaceChildren(...kids.filter(Boolean));
+    const u = usageThisMonth();
+    usage.textContent = u.n ? `За месяц: ${u.n} запр. · ≈ ${usageCost(u).toFixed(2).replace('.', ',')} ₽` : '';
+    if (scroll) requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
   }
 
-  /* ---------- вопросы по данным ---------- */
-  function dataPane() {
-    const input = h('textarea', { rows: 2, placeholder: 'Например: сколько часов МК у меня осталось?', class: 'ai-input' });
-    const send = async (q) => {
-      q = (q ?? input.value).trim();
-      if (!q) return;
-      const item = { q, a: null, err: null, pending: true };
-      session.data.unshift(item);
-      draw();
-      try {
-        const r = await askAssistant('data', [{ role: 'user', content: q }]);
-        item.a = r.text; item.usage = r.usage;
-      } catch (e) { item.err = e.message; }
-      item.pending = false;
-      draw();
-    };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-    return h('div', {},
-      h('div', { class: 'card', style: { marginBottom: '12px' } },
-        h('div', { class: 'ai-ask' }, input,
-          h('button', { class: 'btn primary', type: 'button', onClick: () => send() }, icon('arrowRight', 16), 'Спросить')),
-        h('div', { class: 'ai-chips' }, ...QUICK.map(q => h('button', { type: 'button', class: 'check-pill', onClick: () => send(q) }, q))),
-        h('details', { class: 'ai-summary' },
-          h('summary', {}, 'Какие данные видит помощник'),
-          h('pre', {}, buildSummary()))),
-      ...session.data.map(answerCard));
-  }
-
-  /* ---------- мастер-класс ---------- */
-  function creativePane() {
-    const field = (key, label, ph, area) => h('label', { class: 'field' }, h('span', {}, label),
-      h(area ? 'textarea' : 'input', { type: 'text', rows: area ? 2 : null, value: area ? null : form[key], placeholder: ph, onInput: (e) => { form[key] = e.target.value; } }, area ? form[key] : null));
-    const kind = CREATIVE_KINDS.find(k => k.key === form.kind);
-    const run = async () => {
-      if (!form.topic.trim() && !form.title.trim()) { toast('Укажите тему или название', 'err'); return; }
-      const prompt = kind.prompt(form);
-      const item = { q: `${kind.label}: ${form.title || form.topic}`, a: null, err: null, pending: true, prompt };
-      session.creative.unshift(item);
-      draw();
-      try {
-        const r = await askAssistant('creative', [{ role: 'user', content: prompt }]);
-        item.a = r.text; item.usage = r.usage;
-      } catch (e) { item.err = e.message; }
-      item.pending = false;
-      draw();
-    };
-    return h('div', {},
-      h('div', { class: 'card', style: { marginBottom: '12px' } },
-        h('div', { class: 'tabs', style: { marginBottom: '12px' } }, ...CREATIVE_KINDS.map(k => h('button', {
-          type: 'button', class: 'tab' + (form.kind === k.key ? ' active' : ''), onClick: () => { form.kind = k.key; draw(); },
-        }, k.label))),
-        h('div', { class: 'row' },
-          field('topic', 'Тема или направление', 'например: робототехника и экология'),
-          (form.kind === 'announce' || form.kind === 'report') ? field('title', 'Название мастер-класса', 'если уже есть') : null),
-        h('div', { class: 'row', style: { marginTop: '10px' } },
-          field('age', 'Кто участники', '5 класс / 12–14 лет'),
-          field('duration', 'Длительность', '2 урока по 40 минут')),
-        h('div', { style: { marginTop: '10px' } }, field('extra', 'Пожелания (необязательно)', 'например: без 3D-принтера, нужен результат, который можно унести домой', true)),
-        h('div', { style: { marginTop: '12px', display: 'flex', justifyContent: 'flex-end' } },
-          h('button', { class: 'btn primary', type: 'button', onClick: run }, icon('zap', 16), 'Придумать'))),
-      ...session.creative.map(answerCard));
-  }
-
-  function answerCard(item) {
-    return h('div', { class: 'card ai-answer' },
-      h('div', { class: 'ai-q' }, icon('user', 15), item.q),
-      item.pending ? h('div', { class: 'ai-pending' }, h('span', { class: 'sync-dot wait' }), 'Думаю…')
-        : item.err ? h('div', { class: 'ai-err' }, icon('alert', 15), item.err)
-        : h('div', { class: 'ai-a' }, renderText(item.a)),
-      (!item.pending && item.a) ? h('div', { class: 'ai-actions' },
-        h('button', { class: 'btn sm ghost', type: 'button', onClick: async () => { toast(await copyText(item.a) ? 'Скопировано' : 'Не удалось скопировать', 'ok'); } }, icon('copy', 14), 'Копировать'),
-        item.prompt ? h('button', {
-          class: 'btn sm ghost', type: 'button', onClick: async () => {
-            item.pending = true; item.err = null; draw();
-            try { const r = await askAssistant('creative', [{ role: 'user', content: item.prompt }]); item.a = r.text; }
-            catch (e) { item.err = e.message; }
-            item.pending = false; draw();
-          },
-        }, icon('refresh', 14), 'Другой вариант') : null,
-        item.usage ? h('span', { class: 'muted ai-tok' }, `${(item.usage.prompt_tokens || 0) + (item.usage.completion_tokens || 0)} токенов`) : null) : null);
-  }
-
-  draw();
+  root.append(
+    h('div', { class: 'page-head chat-head' },
+      h('div', {}, h('h1', {}, 'Помощник')),
+      h('div', { class: 'head-actions' },
+        h('button', {
+          class: 'btn', type: 'button', title: 'Начать новый чат',
+          onClick: () => { if (!msgs.length || pending) return; msgs = []; saveChat(msgs); draw(); input.focus(); },
+        }, icon('plus', 16), 'Новый чат'),
+        h('button', { class: 'btn icon-btn', type: 'button', title: 'Настройка и данные помощника', 'aria-label': 'Настройка', onClick: () => setupDialog(() => draw()) }, icon('settings', 16)))),
+    notes,
+    h('div', { class: 'card chat' },
+      list,
+      h('div', { class: 'chat-compose' }, input, sendBtn),
+      h('div', { class: 'chat-foot' }, h('span', { class: 'muted' }, 'Enter — отправить, Shift+Enter — новая строка. Цифры сайт считает сам; тексты — нейросеть GigaChat, проверяйте их.'), usage)));
+  draw(true);
 }
 
-/** Простой показ ответа: заголовки «###», списки «-» / «1.», **жирный**, абзацы. */
+/** Показ ответа: заголовки «###», списки «-» / «1.», **жирный**, абзацы. */
 function renderText(text) {
   const box = h('div', {});
   const inline = (str) => str.split(/(\*\*[^*]+\*\*)/).map(p => (/^\*\*[^*]+\*\*$/.test(p) ? h('b', {}, p.slice(2, -2)) : p.replace(/(^|\s)\*([^*\s][^*]*)\*/g, '$1$2')));
@@ -178,15 +151,19 @@ function renderText(text) {
   return box;
 }
 
-/** Настройка: адрес функции-посредника. Хранится в данных (синхронизируется). */
+/** Настройка: адрес функции-посредника и просмотр данных, которые видит помощник. */
 function setupDialog(redraw) {
   const input = h('input', { type: 'url', value: assistantUrl(), placeholder: 'https://functions.yandexcloud.net/…' });
   modal({
-    title: [icon('settings', 18), ' Подключение помощника'],
+    wide: true,
+    title: [icon('settings', 18), ' Помощник'],
     body: h('div', {},
       h('p', { class: 'muted', style: { marginTop: 0, fontSize: '13px' } },
         'Помощник работает через облачную функцию-посредника: в ней хранится ключ Cloud.ru, и она пускает только разрешённых педагогов. Как её создать — в файле proxy/README.md репозитория сайта.'),
-      h('label', { class: 'field' }, h('span', {}, 'Адрес функции'), input)),
+      h('label', { class: 'field' }, h('span', {}, 'Адрес функции'), input),
+      h('details', { class: 'ai-summary' },
+        h('summary', {}, 'Какие данные видит помощник (прикладываются к каждому вопросу)'),
+        h('pre', {}, buildSummary()))),
     okText: 'Сохранить',
     onOk: () => {
       const v = input.value.trim();

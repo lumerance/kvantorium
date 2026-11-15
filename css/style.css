@@ -1135,3 +1135,52 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
 .ai-usage{font-size:12px;margin-top:6px}
 @media (max-width:600px){.ai-ask{flex-direction:column;align-items:stretch}}
 .ai-a ol{margin:0 0 8px;padding-left:22px}
+
+/* ---------- чат помощника ---------- */
+.chat-head{margin-bottom:12px}
+.chat{display:flex;flex-direction:column;padding:0;overflow:hidden;height:calc(100vh - 210px);min-height:420px}
+.chat-list{flex:1;overflow-y:auto;padding:18px 18px 8px;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth}
+.chat-msg{display:flex;gap:10px;max-width:100%;animation:fadeUp 200ms var(--ease-out) both}
+.chat-msg.user{justify-content:flex-end}
+.chat-msg.user .chat-bubble{background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.3);border-radius:16px 16px 4px 16px;max-width:min(78%,640px);white-space:pre-wrap}
+.chat-avatar{flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:var(--neon);background:rgba(var(--accent-rgb),.1);border:1px solid rgba(var(--accent-rgb),.25)}
+.chat-avatar .ico{margin:0}
+.chat-msg.err .chat-avatar{color:var(--red);background:rgba(255,79,94,.1);border-color:rgba(255,79,94,.3)}
+.chat-body{min-width:0;max-width:min(86%,760px)}
+.chat-bubble{padding:10px 14px;border-radius:4px 16px 16px 16px;background:rgba(255,255,255,.035);border:1px solid var(--line-soft);font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+.chat-msg.err .chat-bubble{color:var(--red);border-color:rgba(255,79,94,.3)}
+.chat-bubble p{margin:0 0 8px}.chat-bubble p:last-child{margin-bottom:0}
+.chat-bubble ul,.chat-bubble ol{margin:0 0 8px;padding-left:20px}
+.chat-bubble ul:last-child,.chat-bubble ol:last-child{margin-bottom:0}
+.chat-bubble h4{margin:8px 0 4px;font-size:14px}
+.chat-bubble h4:first-child{margin-top:0}
+.chat-tools{display:flex;gap:4px;align-items:center;margin-top:4px;opacity:.75}
+.chat-tool{display:inline-flex;align-items:center;gap:5px;background:none;border:0;color:var(--muted);font:600 12px var(--font);padding:4px 6px;border-radius:7px;cursor:pointer}
+.chat-tool .ico{margin:0}
+@media (hover:hover) and (pointer:fine){.chat-tool:hover{color:var(--neon);background:rgba(var(--accent-rgb),.08)}}
+.chat-tok{font-size:11px;color:var(--muted);margin-left:6px}
+.chat-typing{display:inline-flex;gap:5px;padding:14px 16px}
+.chat-typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:chatDot 1s infinite ease-in-out}
+.chat-typing i:nth-child(2){animation-delay:.15s}.chat-typing i:nth-child(3){animation-delay:.3s}
+@keyframes chatDot{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.chat-empty{margin:auto;text-align:center;max-width:560px;padding:20px 0}
+.chat-empty-ico{width:52px;height:52px;margin:0 auto 10px;border-radius:16px;display:grid;place-items:center;color:var(--neon);background:rgba(var(--accent-rgb),.1)}
+.chat-empty-ico .ico{margin:0}
+.chat-empty p{color:var(--muted);font-size:14px;margin:0 0 14px}
+.chat-suggest{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.chat-suggest .check-pill{font-size:12.5px;padding:7px 11px;cursor:pointer;text-align:left}
+.chat-compose{display:flex;gap:8px;align-items:flex-end;padding:10px 12px;border-top:1px solid var(--line-soft)}
+.chat-input{resize:none;min-height:42px;max-height:180px;line-height:1.45}
+.chat-send{flex:none;width:42px;height:42px;min-height:42px;padding:0;border-radius:12px}
+.chat-send .ico{margin:0}
+.chat-send[disabled]{opacity:.5}
+.chat-foot{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;padding:0 14px 10px;font-size:11.5px}
+.chat-usage{white-space:nowrap}
+@media (max-width:900px){.chat{height:calc(100dvh - 250px - env(safe-area-inset-bottom))}}
+@media (max-width:600px){
+  .chat{height:calc(100dvh - 230px - env(safe-area-inset-bottom));border-radius:14px}
+  .chat-list{padding:12px 10px 6px}
+  .chat-body{max-width:calc(100% - 40px)}
+  .chat-msg.user .chat-bubble{max-width:88%}
+  .chat-foot > .muted:first-child{display:none}
+}

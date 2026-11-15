@@ -6,7 +6,7 @@
 //  1. Проверяет, что вопрос задаёт педагог, вошедший на сайт через Яндекс ID,
 //     и его логин есть в списке ALLOWED_LOGINS (чужие не потратят ваши деньги).
 //  2. Ограничивает размер запроса и число запросов в день на педагога.
-//  3. Отправляет вопрос модели в Cloud.ru (Foundation Models) и возвращает ответ.
+//  3. Отправляет переписку модели в Cloud.ru (Foundation Models) и возвращает ответ.
 //
 // Переменные окружения функции:
 //   CLOUDRU_API_KEY  — API-ключ сервисного аккаунта Cloud.ru (обязательно)
@@ -21,8 +21,10 @@ const ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 const DAILY_LIMIT = Number(process.env.DAILY_LIMIT) || 150;
 const MAX_CHARS = 24000;          // на весь запрос (~8 тыс. токенов)
 
-// режимы: вопросы по данным — точно и коротко, творческие — свободнее
+// режимы: chat — общий чат сайта (и вопросы по данным, и мастер-классы),
+// data / creative — на случай отдельных запросов
 const MODES = {
+  chat: { temperature: 0.4, max_tokens: 1500, presence_penalty: 0.1 },
   data: { temperature: 0.1, max_tokens: 400 },
   creative: { temperature: 0.7, max_tokens: 1500, presence_penalty: 0.3 },
 };
@@ -73,7 +75,7 @@ module.exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : (event.body || '{}')); }
   catch { return reply(400, { error: 'Некорректный запрос' }); }
-  const mode = MODES[body.mode] ? body.mode : 'data';
+  const mode = MODES[body.mode] ? body.mode : 'chat';
   const messages = Array.isArray(body.messages) ? body.messages.slice(-20) : [];
   if (!messages.length || messages.some(m => !['system', 'user', 'assistant'].includes(m?.role) || typeof m.content !== 'string')) {
     return reply(400, { error: 'Некорректный запрос' });
