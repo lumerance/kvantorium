@@ -136,6 +136,35 @@ export function initShell() {
   sidebar.addEventListener('transitionend', (e) => { if (e.target === sidebar) movePill(links.get(activeKey), true); });
   window.addEventListener('resize', () => movePill(links.get(activeKey), true));
 
+  /* ---------- нижняя панель (телефон) ---------- */
+  // Главные разделы — всегда под пальцем; остальное — в листе «Ещё».
+  const MAIN = ['dashboard', 'journal', 'trips', 'salary'];
+  const SHORT = { dashboard: 'Обзор', journal: 'Журнал', trips: 'Заезды', salary: 'Зарплата' };
+  const bottom = h('nav', { class: 'bottom-nav', 'aria-label': 'Разделы' });
+  const bLinks = new Map();
+  for (const key of MAIN) {
+    const n = NAV.find(x => x.key === key);
+    const a = h('a', { class: 'bn-item', href: n.href, 'data-key': key }, icon(n.icon, 22), h('span', {}, SHORT[key]));
+    bLinks.set(key, a);
+    bottom.append(a);
+  }
+  const moreBtn = h('button', { type: 'button', class: 'bn-item', 'aria-haspopup': 'dialog' }, icon('menu', 22), h('span', {}, 'Ещё'));
+  bottom.append(moreBtn);
+  const sheet = h('div', { class: 'bn-sheet', role: 'dialog', 'aria-label': 'Все разделы' });
+  const sheetBack = h('div', { class: 'bn-sheet-back' });
+  const closeSheet = () => { app.classList.remove('sheet-open'); };
+  sheetBack.addEventListener('click', closeSheet);
+  const drawSheet = () => {
+    const showActual = !!getState().ui.showActualJournal;
+    sheet.replaceChildren(h('div', { class: 'bn-grip' }), h('div', { class: 'bn-grid' },
+      ...NAV.filter(n => n.key && !MAIN.includes(n.key) && (n.key !== 'journal-actual' || showActual)).map(n => h('a', {
+        class: 'bn-tile' + (n.key === activeKey ? ' active' : ''), href: n.href, onClick: closeSheet,
+      }, icon(n.icon, 22), h('span', {}, n.label)))));
+  };
+  moreBtn.addEventListener('click', () => { drawSheet(); app.classList.toggle('sheet-open'); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+  app.append(bottom, sheetBack, sheet);
+
   /* ---------- верхняя строка ---------- */
   const crumbs = h('div', { class: 'tb-crumbs' });
   const aggChip = h('a', { class: 'tb-agg', href: '#/data', title: 'Агломерации — на странице «Данные»' });
@@ -175,6 +204,9 @@ export function initShell() {
       if (k === key) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     }
     movePill(links.get(key));
+    closeSheet();
+    for (const [k, a] of bLinks) a.classList.toggle('active', k === key);
+    moreBtn.classList.toggle('active', !MAIN.includes(key));
     crumbs.replaceChildren(...list.flatMap((c, i) => [
       i ? icon('chevron', 14) : null,
       h('span', { class: i === list.length - 1 ? 'cur' : '' }, c),

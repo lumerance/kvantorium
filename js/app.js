@@ -31,3 +31,9 @@ initShell();
 startRouter();
 initCloud({ onConflict: askConflict, onRemoteApplied: () => { repaint(); toast('Загружены данные из облака'); } });
 if (auth) toast(auth.ok ? 'Вы вошли через Яндекс — данные будут сохраняться на ваш Яндекс.Диск' : `Вход не выполнен: ${auth.error}`, auth.ok ? 'ok' : 'err', 6000);
+
+// телефон: длинные пояснения свёрнуты до двух строк — тап раскрывает
+document.addEventListener('click', (e) => {
+  const el = e.target.closest?.('.page-head p, .card-sub');
+  if (el && matchMedia('(max-width:600px)').matches) el.classList.toggle('open');
+});

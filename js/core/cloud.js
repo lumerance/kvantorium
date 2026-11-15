@@ -103,9 +103,15 @@ class AuthError extends Error {}
 async function api(path, opts = {}) {
   const auth = read(AUTH_KEY);
   if (!auth?.token) throw new AuthError('Не выполнен вход');
-  const res = await fetch(path.startsWith('http') ? path : API + path, {
-    ...opts, headers: { Authorization: `OAuth ${auth.token}`, Accept: 'application/json', ...(opts.headers || {}) },
-  });
+  let res;
+  try {
+    res = await fetch(path.startsWith('http') ? path : API + path, {
+      ...opts, headers: { Authorization: `OAuth ${auth.token}`, Accept: 'application/json', ...(opts.headers || {}) },
+    });
+  } catch (e) {
+    const host = path.startsWith('http') ? new URL(path).host : 'cloud-api.yandex.net';
+    throw new Error(`нет ответа от ${host} (${e.message})`);
+  }
   if (res.status === 401 || res.status === 403) throw new AuthError('Вход устарел — войдите заново');
   return res;
 }
@@ -132,7 +138,13 @@ async function download() {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Яндекс.Диск: ${res.status}`);
   const { href } = await res.json();
-  const file = await fetch(href);
+  let file;
+  try { file = await fetch(href); }
+  catch (e) {
+    // запросы к API прошли, а сам файл браузер не отдал — сервер скачивания
+    // не разрешил чтение со стороннего сайта (CORS)
+    throw new Error(`скачивание файла с Диска не удалось (${e.message}) — сервер Яндекса не отдал файл браузеру`);
+  }
   if (!file.ok) throw new Error(`Яндекс.Диск (скачивание): ${file.status}`);
   return JSON.parse(await file.text());
 }
@@ -141,7 +153,9 @@ async function upload(text) {
   const res = await api(`/resources/upload?path=${encodeURIComponent(FILE)}&overwrite=true`);
   if (!res.ok) throw new Error(`Яндекс.Диск: ${res.status}`);
   const { href } = await res.json();
-  const put = await fetch(href, { method: 'PUT', body: new Blob([text], { type: 'application/json' }) });
+  let put;
+  try { put = await fetch(href, { method: 'PUT', body: new Blob([text], { type: 'application/json' }) }); }
+  catch (e) { throw new Error(`отправка файла на Диск не удалась (${e.message})`); }
   if (!put.ok && put.status !== 201 && put.status !== 202) throw new Error(`Яндекс.Диск (загрузка): ${put.status}`);
   return remoteMeta();
 }
