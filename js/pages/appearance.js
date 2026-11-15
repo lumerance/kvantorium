@@ -29,7 +29,7 @@ export function render(root) {
     const changed = Object.keys(DEFAULT_APPEARANCE).some(k => a[k] !== DEFAULT_APPEARANCE[k]);
 
     wrap.replaceChildren(
-      h('div', { class: 'page-head' },
+      h('div', { class: 'page-head head-inline' },
         h('div', {}, h('h1', {}, 'Оформление'), h('p', {}, 'Настройте вид сайта под себя — меняется сразу и запоминается на этом устройстве.')),
         changed ? h('div', { class: 'head-actions' },
           h('button', { class: 'btn', onClick: () => { setAppearance({ ...DEFAULT_APPEARANCE }); draw(); } }, icon('reset', 16), 'Как было')) : null),
