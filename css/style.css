@@ -1204,3 +1204,14 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
 .share-link { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .share-link input { flex: 1 1 240px; min-width: 0; font-family: var(--mono, monospace); font-size: 12.5px; }
 .sg-col .sg-err { color: var(--danger, #e5484d); }
+
+/* журнал: сортировка по «Фамилия Имя» */
+th.th-sort { cursor: pointer; user-select: none; }
+th.th-sort:hover { color: var(--neon); }
+th.th-sort.on { color: var(--neon); }
+.th-sort-ico { margin-left: 8px; font-size: 10.5px; font-weight: 500; opacity: .8; }
+
+/* журнал: сортировка по «Фамилия Имя» */
+th.th-sort { cursor: pointer; user-select: none; }
+th.th-sort:hover, th.th-sort.on { color: var(--neon); }
+.th-sort-ico { margin-left: 8px; font-size: 10.5px; font-weight: 500; opacity: .8; }

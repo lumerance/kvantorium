@@ -549,6 +549,13 @@ export function render(root, params = {}) {
   redraw();
 }
 
+/** Сортировка учеников по алфавиту (клик по «Фамилия Имя»), запоминается на устройстве. */
+const SORT_KEY = 'kvantorium28.journalSort';
+let sortAlpha = (() => { try { return localStorage.getItem(SORT_KEY) === 'az'; } catch { return false; } })();
+const orderedStudents = (group) => (sortAlpha
+  ? [...group.students].sort((a, b) => (a.fio || a.short || '').localeCompare(b.fio || b.short || '', 'ru'))
+  : group.students);
+
 function journalTable(data, subject, group, shift, lessons, setMark, redraw, getBrush, onHeader, readOnly, srcKey = null) {
   const jGroup = data.journal?.[shift]?.[group.id] || {};
   const isRandomMode = !readOnly && getBrush() === 'random';
@@ -563,7 +570,12 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
 
   const thead = h('thead', {},
     h('tr', {},
-      h('th', { class: 'sticky-col', rowspan: 2, style: { minWidth: '220px' } }, 'Фамилия Имя'),
+      h('th', {
+        class: 'sticky-col th-sort' + (sortAlpha ? ' on' : ''), rowspan: 2, style: { minWidth: '220px' },
+        title: sortAlpha ? 'Отсортировано по алфавиту — клик вернёт исходный порядок' : 'Клик — по алфавиту',
+        'aria-sort': sortAlpha ? 'ascending' : 'none',
+        onClick: () => { sortAlpha = !sortAlpha; try { localStorage.setItem(SORT_KEY, sortAlpha ? 'az' : ''); } catch { /* */ } redraw(); },
+      }, 'Фамилия Имя', sortAlpha ? h('span', { class: 'th-sort-ico', 'aria-hidden': 'true' }, 'А→Я') : null),
       ...lessons.map(l => h('th', colHeaderProps(l), dateRu(l.date))),
       h('th', { class: 'num', rowspan: 2, title: 'Средний балл за заезд' }, `Ср. балл${shift === 3 ? ' (3 заезд)' : ''}`),
       shift === 3 ? h('th', { class: 'num', rowspan: 2, title: 'Средний балл за все три заезда' }, 'Ср. за 3 заезда') : null,
@@ -574,7 +586,7 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
   );
 
   const tbody = h('tbody', {});
-  group.students.forEach((s, i) => {
+  orderedStudents(group).forEach((s, i) => {
     const cells = jGroup[s.id] || {};
     const avgCell = h('td', { class: 'num' });
     const avg3Cell = shift === 3 ? h('td', { class: 'num' }) : null;
@@ -655,7 +667,7 @@ function exportJournal(data, subject, group, shift, lessons) {
   const head = ['№', 'Фамилия Имя', ...lessons.map(l => `${dateRu(l.date)} ${l.no}ур`), 'Средний балл'];
   if (shift === 3) head.push('Средний за 3 заезда');
   const rows = [[`${subject.title} — ${group.name} — ${shift} заезд`], head];
-  group.students.forEach((s, i) => {
+  orderedStudents(group).forEach((s, i) => {
     const cells = jGroup[s.id] || {};
     const marks = lessons.map(l => cells[lessonKey(l)] || '');
     const v = avgOf(marks);
