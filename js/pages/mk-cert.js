@@ -52,7 +52,39 @@ function defaultShift(agg) {
 }
 
 /** Похоже ли, что в переписке шла речь о мастер-классе (для кнопки в чате). */
-export const isMkChat = (history) => history.some(m => m.role === 'user' && /мастер|\bмк\b|названи|анонс|иде[июяйе]/i.test(m.content));
+// Вопрос о своих данных (часы, заезды, зарплата), а не о содержании МК.
+// (\b в JS не видит границ русских слов — границы через (?<![а-яё]) / (?![а-яё]))
+const DATA_Q = /сколько|остал|закры|списа|(?<![а-яё])час(?:а|ов)?(?![а-яё])|зарплат|получу|заезд|(?<![а-яё])рв(?![а-яё])|отпуск|ставк/i;
+// Просьба что-то придумать / написать.
+const CREATIVE_Q = /придума|предлож|иде[июяйе]|назван|анонс|аннотац|сценари|(?<![а-яё])план|опиш|напиш|сочин|(?<![а-яё])тем[аыуе]?(?![а-яё])|(?<![а-яё])цел[ьи](?![а-яё])|программ|вариант|перепиш|короче|подробн|измени|добав/i;
+const MK_TOPIC = /мастер[-\s]?класс|(?<![а-яё])мк(?![а-яё])/i;
+
+/**
+ * Показывать ли «Оформить справку» под ответом msgs[i]: ответ на просьбу
+ * придумать/описать мастер-класс или уточнение к такому ответу
+ * («сделай короче», «другие названия»). Под ответами о часах МК, заездах
+ * и зарплате кнопки нет.
+ */
+export function isMkAnswer(msgs, i) {
+  const a = msgs[i];
+  if (!a || a.role !== 'assistant' || a.err) return false;
+  let qi = i - 1;
+  while (qi >= 0 && msgs[qi].role !== 'user') qi--;
+  if (qi < 0) return false;
+  const q = msgs[qi].content || '';
+  const creative = CREATIVE_Q.test(q);
+  if (DATA_Q.test(q) && !(creative && MK_TOPIC.test(q))) return false;
+  if (MK_TOPIC.test(q) && creative) return true;
+  // уточнение без слова «мастер-класс»: продолжение, если предыдущий ответ был про МК
+  if (creative || q.length < 80) {
+    let pi = qi - 1;
+    while (pi >= 0 && (msgs[pi].role !== 'assistant' || msgs[pi].err)) pi--;
+    return pi >= 0 && isMkAnswer(msgs, pi);
+  }
+  return false;
+}
+/** Была ли в переписке работа над мастер-классом (для совместимости). */
+export const isMkChat = (history) => history.some((m, i) => isMkAnswer(history, i));
 
 /**
  * @param {{chat?: Array<{role, content}>}} opts — переписка из чата помощника
