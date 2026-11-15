@@ -26,6 +26,14 @@ export const ENROLL_SUBJECT_ID = '__enroll__';
 const shortName = (fio) => (fio || '').trim().split(/\s+/).slice(0, 2).join(' ');
 const matchKey = (fio) => shortName(fio).toLowerCase();
 
+/** Короткое название профиля для телефона: «Промробо/Промдизайн (5 класс)» -> «5 класс». */
+function shortSubject(s) {
+  if (s.isEnroll) return s.title.replace(/\s*\(.*\)\s*$/, '') || s.title;
+  const m = /(\d{1,2})\s*класс/i.exec(s.title);
+  if (m) return `${m[1]} класс`;
+  return s.grade ? `${s.grade} класс` : s.title;
+}
+
 function enrollAsSubject(agg, isActual) {
   const src = isActual ? agg.actual.enroll : agg.enroll;
   const groups = (src?.groups || []).map(g => ({
@@ -189,7 +197,7 @@ export function render(root, params = {}) {
             { label: 'Переименовать…', icon: icon('pen', 16), onClick: () => renameSubject(s) },
           ]);
         },
-      }, s.title))),
+      }, h('span', { class: 'lbl-full' }, s.title), h('span', { class: 'lbl-short' }, shortSubject(s))))),
       h('div', { class: 'tabs-row sub' }, ...subject.groups.map(g => h('button', {
         class: 'tab' + (g.id === group.id ? ' active' : ''),
         onClick: () => { update(x => { x.ui[uiGroupKey] = g.id; }); redraw(); }
@@ -208,18 +216,18 @@ export function render(root, params = {}) {
           onClick: () => { brush = m; redraw(); }
         }, m)),
         h('button', {
-          class: 'btn sm' + (brush === '' ? ' primary' : ''),
+          class: 'btn sm' + (brush === '' ? ' primary' : ''), title: 'Стереть',
           onClick: () => { brush = ''; redraw(); }
-        }, icon('eraser', 16), 'Стереть'),
+        }, icon('eraser', 16), h('span', { class: 'btn-label' }, 'Стереть')),
         h('button', {
-          class: 'btn sm' + (brush === null ? ' primary' : ''),
+          class: 'btn sm' + (brush === null ? ' primary' : ''), title: 'Цикл по клику: ✓ → н → 5 → 4 → 3 → 2',
           onClick: () => { brush = null; redraw(); }
-        }, icon('refresh', 16), 'Цикл по клику'),
+        }, icon('refresh', 16), h('span', { class: 'btn-label' }, 'Цикл по клику')),
         h('button', {
           class: 'btn sm' + (brush === 'pipette' ? ' primary' : ''),
           title: 'Пипетка: клик по шапке урока копирует его отметки, клик по другому уроку — вставляет их',
           onClick: () => { brush = 'pipette'; redraw(); },
-        }, icon('pipette', 16), 'Пипетка'),
+        }, icon('pipette', 16), h('span', { class: 'btn-label' }, 'Пипетка')),
         (brush === 'pipette' && pipetteBuf && pipetteBuf.groupId === group.id && pipetteBuf.shift === shift)
           ? h('span', { class: 'pill ok pipette-chip' }, `скопирован ${pipetteBuf.no} ур. ${dateRu(pipetteBuf.date)}`,
               h('button', { class: 'chip-x', title: 'Забыть скопированное', 'aria-label': 'Забыть скопированное', onClick: () => { pipetteBuf = null; redraw(); } }, icon('x', 13)))

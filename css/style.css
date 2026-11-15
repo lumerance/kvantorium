@@ -1048,3 +1048,43 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
   .kv{font-size:13px}
   .modal{padding:16px}
 }
+
+/* ---------- телефон, точечные правки ---------- */
+.lbl-short,.sched-codes-toggle{display:none}
+@media (max-width:600px){
+  /* журнал: вкладки профилей — только класс; кисти — иконками */
+  .lbl-full{display:none}
+  .lbl-short{display:inline}
+  .btn-label{display:none}
+  .tab-tiers .tabs-row{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .tab-tiers .tabs-row::-webkit-scrollbar{display:none}
+  .tab-tiers .tab{white-space:nowrap;padding:6px 10px}
+  .legend{display:none}
+  .mark{min-width:38px}
+
+  /* зарплата: сначала плитки, потом настройки; плитки одного размера */
+  .salary-calc{display:flex;flex-direction:column}
+  .salary-calc > .page-head{order:-3}
+  .salary-calc > .salary-tiles{order:-2}
+  .salary-tiles{grid-auto-rows:1fr}
+  .salary-tiles > .card{height:100%;display:flex;flex-direction:column;justify-content:flex-start}
+  .salary-tiles .stat .label{min-height:2.4em;line-height:1.2}
+  .salary-tiles .stat .sub{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+  /* история зарплат: годы — в строку, подписи шкалы не у края */
+  .card-head{flex-direction:column;align-items:stretch;gap:8px}
+  .card-head .tabs{align-self:flex-start;padding:3px;gap:2px}
+  .card-head .tabs .tab{padding:5px 12px}
+  .chart{margin-left:58px;height:200px}
+  .chart-tick span{font-size:10px}
+
+  /* заезды: МК-2 и МК-1 в одну строку */
+  .mk-switch{margin-left:0;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mk-group .tabs{padding:3px;gap:2px;display:flex}
+  .mk-group .tab{flex:1;justify-content:center;padding:6px 4px;font-size:11.5px;white-space:nowrap}
+
+  /* данные: группы в карточках расписания — по кнопке */
+  .sched-codes-toggle{display:inline-flex;margin:8px 0 2px}
+  .sched-codes{display:none!important}
+  .sched-codes.open{display:flex!important}
+}

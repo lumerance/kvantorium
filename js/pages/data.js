@@ -578,8 +578,12 @@ function scheduleCard(agg, redraw, kind, readOnly) {
       body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Даты'),
         h('span', { class: 'v', style: { fontSize: '12px' } }, sc.dates.length ? `${dateRu(sc.dates[0])} – ${dateRu(sc.dates.at(-1))}` : '—')));
       body.append(h('div', { class: 'kv' }, h('span', { class: 'k' }, 'Педагоги'), h('span', { class: 'v', style: { fontSize: '11.5px' } }, sc.teachers.join(', ') || '—')));
-      body.append(h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '10px 0' } },
-        ...sc.codes.map(c => h('span', { class: 'pill' + (codeBinding(data, c) ? ' ok' : ' warn') }, c))));
+      const codesBox = h('div', { class: 'sched-codes', style: { display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '10px 0' } },
+        ...sc.codes.map(c => h('span', { class: 'pill' + (codeBinding(data, c) ? ' ok' : ' warn') }, c)));
+      body.append(h('button', {
+        type: 'button', class: 'btn sm ghost sched-codes-toggle',
+        onClick: (e) => { const open = codesBox.classList.toggle('open'); e.currentTarget.lastChild.textContent = open ? 'Скрыть группы' : `Показать группы (${sc.codes.length})`; },
+      }, icon('users', 14), h('span', {}, `Показать группы (${sc.codes.length})`)), codesBox);
       body.append(h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
         readOnly ? null : h('button', { class: 'btn sm', onClick: () => scheduleDialog(shift, redraw, false, kind) }, icon('checkSquare', 16), 'Оставить только свои'),
         h('button', { class: 'btn sm', onClick: () => showLessons(sc, shift) }, 'Показать занятия'),

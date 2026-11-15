@@ -311,7 +311,7 @@ function renderCalcTab(root) {
       onInput: (e) => { const v = parseFloat(e.target.value.replace(',', '.')); update(x => { x.salary[key] = isFinite(v) ? v : 0; }); redraw(); },
     }));
 
-  const wrap = h('div', {});
+  const wrap = h('div', { class: 'salary-calc' });
   root.append(wrap);
 
   function redraw() {
@@ -345,7 +345,7 @@ function renderCalcTab(root) {
     /* --- ряд настроек начисления: формат работы + постоянные величины --- */
     const mine = myConstants(s);
     const changed = CONST_KEYS.some(([k]) => Number(s[k]) !== Number(mine[k]));
-    wrap.append(h('div', { class: 'grid cols-2', style: { marginBottom: '16px', alignItems: 'stretch' } },
+    wrap.append(h('div', { class: 'grid cols-2 salary-settings', style: { marginBottom: '16px', alignItems: 'stretch' } },
       h('div', { class: 'card' },
         h('h3', {}, 'Формат работы'),
         h('div', { class: 'card-sub' }, 'Ставка, на которой вы оформлены, и договор ГПХ — от этого зависят расчёт, расчётный листок и отпускные.'),
@@ -413,7 +413,7 @@ function renderCalcTab(root) {
       });
       return node;
     };
-    wrap.append(h('div', { class: 'grid cols-4 tiles-5', style: { marginBottom: '16px' } },
+    wrap.append(h('div', { class: 'grid cols-4 tiles-5 salary-tiles', style: { marginBottom: '16px' } },
       colorable('current', '', statCard(`${formatLabel} · на руки`, money0(r.withGph),
         `до НДФЛ ${money0(r.current.gross + (r.hasGph ? p.gph : 0))}`, '')),
       colorable('forecast', '', forecastTile(r.current, fullNet, redraw)),
