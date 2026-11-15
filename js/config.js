@@ -4,4 +4,4 @@
 // Это не секрет: ключ Cloud.ru хранится в самой функции, а отвечает она
 // только тем, кто вошёл через Яндекс и чей логин есть в её ALLOWED_LOGINS.
 // Пока адрес пустой, каждый вписывает его сам в «Помощник» → «Настройка».
-export const ASSISTANT_URL = '';
+export const ASSISTANT_URL = 'https://functions.yandexcloud.net/d4e7s8buqt93b54pls1n';
