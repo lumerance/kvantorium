@@ -549,6 +549,10 @@ export function render(root, params = {}) {
   redraw();
 }
 
+/* протягивание кистью: один набор глобальных обработчиков на всю страницу */
+let stopActivePaint = null;
+for (const ev of ['pointerup', 'pointercancel', 'touchend', 'blur']) window.addEventListener(ev, () => stopActivePaint?.());
+
 /** Сортировка учеников по алфавиту (клик по «Фамилия Имя»), запоминается на устройстве. */
 const SORT_KEY = 'kvantorium28.journalSort';
 let sortAlpha = (() => { try { return localStorage.getItem(SORT_KEY) === 'az'; } catch { return false; } })();
@@ -586,6 +590,60 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
   );
 
   const tbody = h('tbody', {});
+  // «Зажать и провести»: первая клетка решает, какую отметку ставить
+  // (или стирать, если там уже эта кисть), остальные под курсором/пальцем
+  // получают ту же. На телефоне — после удержания пальца ~0,35 с.
+  const applyOf = new WeakMap();   // кнопка -> (mark) => void
+  const markOf = new WeakMap();    // кнопка -> текущая отметка
+  let paint = null;                // { mark, done:Set }
+  let suppressClick = false;       // после протягивания пальцем — не считать отпускание кликом
+  const paintAt = (x, y) => {
+    if (!paint) return;
+    const btn = document.elementFromPoint(x, y)?.closest?.('button.mark');
+    if (!btn || paint.done.has(btn) || !applyOf.has(btn)) return;
+    paint.done.add(btn);
+    applyOf.get(btn)(paint.mark);
+  };
+  const stopPaint = () => { if (paint) { paint = null; document.body.classList.remove('mark-painting'); } };
+  stopActivePaint = stopPaint;
+  const startPaint = (btn) => {
+    const brush = getBrush();
+    const cur = markOf.get(btn) || '';
+    const mark = brush === null ? CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length] : (cur === brush ? '' : brush);
+    paint = { mark, done: new Set([btn]) };
+    document.body.classList.add('mark-painting');
+    applyOf.get(btn)(mark);
+  };
+  const brushError = () => {
+    const brush = getBrush();
+    if (brush === 'random') { toast('В режиме случайных оценок кликните по шапке занятия (дате)', 'err'); return true; }
+    if (brush === 'pipette') { toast('Пипеткой кликайте по шапке урока (дата или «вт 1ур»)', 'err'); return true; }
+    return false;
+  };
+  if (!readOnly) {
+    let hold = null;
+    tbody.addEventListener('pointerdown', (e) => {
+      const btn = e.target.closest('button.mark');
+      if (!btn || !applyOf.has(btn) || e.button !== 0) return;
+      if (e.pointerType === 'mouse') {
+        e.preventDefault();          // без выделения текста при протягивании
+        if (brushError()) return;
+        startPaint(btn);
+      } else {
+        // палец: короткое касание — обычный клик; удержание — режим протягивания
+        clearTimeout(hold);
+        const x0 = e.clientX, y0 = e.clientY;
+        hold = setTimeout(() => { hold = null; if (!brushError()) { suppressClick = true; startPaint(btn); navigator.vibrate?.(15); } }, 350);
+        const cancel = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) { clearTimeout(hold); hold = null; } };
+        btn.addEventListener('pointermove', cancel);
+        btn.addEventListener('pointerup', () => { btn.removeEventListener('pointermove', cancel); clearTimeout(hold); }, { once: true });
+      }
+    });
+    tbody.addEventListener('pointermove', (e) => { if (paint && e.pointerType === 'mouse') paintAt(e.clientX, e.clientY); });
+    // на телефоне во время протягивания таблица не прокручивается
+    tbody.addEventListener('touchmove', (e) => { if (!paint) return; e.preventDefault(); const t = e.touches[0]; paintAt(t.clientX, t.clientY); }, { passive: false });
+  }
+
   orderedStudents(group).forEach((s, i) => {
     const cells = jGroup[s.id] || {};
     const avgCell = h('td', { class: 'num' });
@@ -613,15 +671,20 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
         if (!readOnly) {
           const apply = (mark) => {
             setMark(shift, group.id, s.id, k, mark);
+            markOf.set(btn, mark || '');
             btn.className = 'mark ' + markClass(mark);
             btn.textContent = mark || '';
             refreshAvg();
           };
-          btn.addEventListener('click', () => {
+          applyOf.set(btn, apply);
+          markOf.set(btn, cells[k] || '');
+          // мышь обрабатывается в pointerdown (протягивание); click — касание и клавиатура
+          btn.addEventListener('click', (e) => {
+            if (suppressClick) { suppressClick = false; return; }
+            if (e.pointerType === 'mouse' || (e.detail > 0 && !e.pointerType && matchMedia('(pointer: fine)').matches)) return;
+            if (brushError()) return;
             const brush = getBrush();
-            if (brush === 'random') { toast('В режиме случайных оценок кликните по шапке занятия (дате)', 'err'); return; }
-            if (brush === 'pipette') { toast('Пипеткой кликайте по шапке урока (дата или «вт 1ур»)', 'err'); return; }
-            const cur = data.journal?.[shift]?.[group.id]?.[s.id]?.[k] || '';
+            const cur = markOf.get(btn) || '';
             if (brush === null) apply(CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length]);
             else apply(cur === brush ? '' : brush);
           });
@@ -659,7 +722,7 @@ function journalTable(data, subject, group, shift, lessons, setMark, redraw, get
               : 'Пипетка: кликните по шапке урока (дата или «вт 1ур») — скопируются его отметки.']
         : isRandomMode
           ? [icon('dice', 16), 'Режим случайных оценок: клик по шапке занятия (дате) раздаёт оценки всему столбцу. Отдельные клетки в этом режиме не редактируются — выберите другую кисть, чтобы вернуться к обычной простановке.']
-          : 'Клик по клетке ставит выбранную кисть (повторный клик той же отметкой — снимает), правая кнопка мыши — очистить. Средний балл считается только по оценкам 2–5.'));
+          : 'Клик по клетке ставит выбранную кисть (повторный клик той же отметкой — снимает); зажмите и проведите — кисть ляжет на весь столбец или строку (на телефоне — удержите палец и ведите). Правая кнопка мыши — очистить. Средний балл считается только по оценкам 2–5.'));
 }
 
 function exportJournal(data, subject, group, shift, lessons) {
