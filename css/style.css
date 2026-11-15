@@ -941,3 +941,6 @@ select.sg-cell.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
 .trip-rv{font-size:13px;display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,200,87,.35);background:rgba(255,200,87,.06)}
 .trip-hint{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 @media (max-width:700px){.trip-head{grid-template-columns:1fr auto;}.trip-dep,.trip-chev{display:none}.trip-dates{grid-column:1/-1;order:3}}
+.mk-switch{gap:14px;align-items:flex-end;flex-wrap:wrap}
+.mk-group{display:flex;flex-direction:column;gap:4px}
+.mk-label{font-size:11px;font-weight:800;letter-spacing:.9px;color:var(--muted);padding-left:4px}

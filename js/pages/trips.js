@@ -1,11 +1,11 @@
-// «Заезды»: план-график перемещения технопарка для своей команды. По каждому
+// «Заезды»: планы-графики перемещения технопарков МК-1 и МК-2, для своей команды. По каждому
 // заезду — выезд (за день до начала), сколько будних и выходных дней в дороге
 // и на месте, и будут ли РВ (выезд в выходной/праздник, конец заезда в субботу).
 import { h, toast, modal, confirmBox, switchToggle, MONTHS } from '../core/ui.js';
 import { icon } from '../core/icons.js';
 import { getState, update } from '../core/store.js';
 import { go } from '../core/router.js';
-import { DEFAULT_TRIPS, SEASON, PLACE_KINDS, HOLIDAYS, legInfo, rvByMonth, weekday, isWeekend } from '../data/trips.js';
+import { DEFAULT_TRIPS, MKS, SEASON, PLACE_KINDS, HOLIDAYS, legInfo, rvByMonth, weekday, isWeekend } from '../data/trips.js';
 
 const WD = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 const ddmm = (s) => `${s.slice(8, 10)}.${s.slice(5, 7)}`;
@@ -16,10 +16,16 @@ const monthName = (key) => { const [y, m] = key.split('-').map(Number); return `
 
 /** Заезды с учётом правок педагога. */
 export function tripsList(st = getState()) {
-  return (st.trips?.list || DEFAULT_TRIPS).map((t, i) => ({ id: t.id || `t${i}`, ...t }));
+  let list = st.trips?.list;
+  // правки, сохранённые до появления МК-1, — дополняем заездами МК-1 из графика
+  if (list && !list.some(t => t.mk === 'mk1')) {
+    list = [...list.map(t => ({ mk: 'mk2', ...t })), ...DEFAULT_TRIPS.map((t, i) => ({ id: `t${i}`, ...t })).filter(t => t.mk === 'mk1')];
+  }
+  return (list || DEFAULT_TRIPS).map((t, i) => ({ id: t.id || `t${i}`, mk: t.mk || 'mk2', ...t }));
 }
 export const myTeam = (st = getState()) => st.trips?.team ?? 2;
-export const myTrips = (st = getState()) => tripsList(st).filter(t => t.team === myTeam(st));
+export const myMk = (st = getState()) => st.trips?.mk ?? 'mk2';
+export const myTrips = (st = getState()) => tripsList(st).filter(t => t.mk === myMk(st) && t.team === myTeam(st));
 
 /** РВ по заездам в месяце (для подсказки на странице «Зарплата»). */
 export function tripRvForMonth(year, month, st = getState()) {
@@ -34,6 +40,7 @@ export function render(root) {
   function draw() {
     const st = getState();
     const team = myTeam(st);
+    const mk = myMk(st);
     const trips = myTrips(st);
     const now = today();
     // номер заезда внутри места (агломерации): 1, 2, 3
@@ -45,13 +52,15 @@ export function render(root) {
     wrap.replaceChildren(
       h('div', { class: 'page-head' },
         h('div', {}, h('h1', {}, 'Заезды'),
-          h('p', {}, `План-график мобильного технопарка на ${SEASON} уч. год. Выезд — за день до начала заезда.`)),
-        h('div', { class: 'head-actions' },
-          h('div', { class: 'tabs', role: 'radiogroup', 'aria-label': 'Команда' },
-            ...[1, 2].map(n => h('button', {
-              type: 'button', class: 'tab' + (team === n ? ' active' : ''),
-              onClick: () => { update(x => { x.trips = { ...(x.trips || {}), team: n }; }); draw(); },
-            }, `Команда ${n}`))))),
+          h('p', {}, `${MKS.find(m => m.key === mk).label}, команда ${team} · план-график на ${SEASON} уч. год. Выезд — за день до начала заезда.`)),
+        h('div', { class: 'head-actions mk-switch' },
+          ...MKS.map(m => h('div', { class: 'mk-group' },
+            h('div', { class: 'mk-label' }, m.label),
+            h('div', { class: 'tabs', role: 'radiogroup', 'aria-label': `${m.label}: команда` },
+              ...[1, 2].map(n => h('button', {
+                type: 'button', class: 'tab' + (mk === m.key && team === n ? ' active' : ''), role: 'radio', 'aria-checked': String(mk === m.key && team === n),
+                onClick: () => { update(x => { x.trips = { ...(x.trips || {}), mk: m.key, team: n }; }); open.clear(); draw(); },
+              }, `Команда ${n}`))))))),
 
       // РВ по месяцам — сводка
       h('div', { class: 'card', style: { marginBottom: '16px' } },
