@@ -14,6 +14,7 @@ import { placeOfAgg, placeTitle } from '../data/places.js';
 import { buildSchedule, schoolDays, countPlaced, checkGrid, weeksOf, weekdayIdx, DEFAULT_TIMES } from '../lib/schedule-build.js';
 import { buildScheduleDocx } from '../exporters/schedule-docx.js';
 import { accountName } from '../core/cloud.js';
+import { readShare } from '../core/share.js';
 
 const DEFAULT_KV = { title: 'Руководитель МТ «Кванториум-28»', head: '' };
 const natural = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
@@ -85,11 +86,63 @@ export function openScheduleGenerator() {
     comment: '',
     variant: 0,
     grid: null,
-    second: { enabled: true, direction: '', first: true, ...(cfg.second || {}) },
+    second: { enabled: true, direction: '', first: true, ...(cfg.second || {}), grid: undefined },
+    // второй педагог по ссылке коллеги (Яндекс.Диск): его группы и расписание
+    col: { url: st.colleagueShare?.url || '', data: st.colleagueShare?.cache || null, aggIdx: -1, loading: false, err: '' },
+    grid2: null, groups2: [], source2: '',
   };
+  let step = 1;
 
   const aggOf = () => aggs.find(a => a.id === state.aggId) || aggs[0];
   const placeOf = () => placeOfAgg(aggOf());
+
+  /* ---- коллега ---- */
+  /** Агломерация коллеги с тем же местом (НуВ, Шимановск…), иначе -1. */
+  function matchColAgg() {
+    const aggs2 = state.col.data?.aggs || [];
+    const p = placeOf();
+    let i = p ? aggs2.findIndex(a => a.place === p && a.shifts?.[state.shift]) : -1;
+    if (i < 0 && p) i = aggs2.findIndex(a => a.place === p);
+    return i;
+  }
+  const colShift = () => state.col.data?.aggs?.[state.col.aggIdx]?.shifts?.[state.shift] || null;
+  async function pullColleague({ quiet = false } = {}) {
+    const url = state.col.url.trim();
+    if (!url) return;
+    state.col.loading = true; state.col.err = '';
+    if (step === 1) step1();
+    try {
+      const data = await readShare(url);
+      state.col.data = data;
+      state.col.aggIdx = matchColAgg();
+      update(x => { x.colleagueShare = { url, cache: data, at: new Date().toISOString() }; });
+      if (!quiet) toast(`Данные коллеги получены: ${data.direction || 'без названия'}`);
+    } catch (e) {
+      state.col.err = e.message;
+      if (!quiet) toast(e.message, 'err', 6000);
+    }
+    state.col.loading = false;
+    if (step === 1) step1();
+  }
+  /** Уроки коллеги на мои дни: его сохранённое расписание или автоматическая расстановка. */
+  function buildSecond(days) {
+    const sh = colShift();
+    if (!sh) return false;
+    state.groups2 = (sh.groups || []).map(g => ({ code: g.code, hours: Number(g.hours) || 0, isDo: !!g.isDo }));
+    const empty = () => Array(DEFAULT_TIMES.length).fill('');
+    const his = sh.draft?.grid;
+    if (his && days.some(d => his[d]?.some(Boolean))) {
+      state.grid2 = Object.fromEntries(days.map(d => [d, his[d] ? [...his[d], ...empty()].slice(0, DEFAULT_TIMES.length) : empty()]));
+      state.source2 = 'draft';
+      // его группы могут быть не отмечены в «Группах» — добавить коды из сетки
+      for (const row of Object.values(state.grid2)) for (const c of row) if (c && !state.groups2.some(g => g.code === c)) state.groups2.push({ code: c, hours: 0, isDo: isDoCode(c) });
+    } else if (state.groups2.some(g => g.hours > 0)) {
+      state.grid2 = buildSchedule({ days, groups: state.groups2.map(g => ({ ...g, on: true })), slotsPerDay: DEFAULT_TIMES.length, variant: 0 }).grid;
+      state.source2 = 'auto';
+    } else return false;
+    if (!state.second.direction && state.col.data.direction) state.second.direction = state.col.data.direction;
+    return true;
+  }
 
   /** Подставляет всё, что известно об агломерации/заезде (и черновик, если есть). */
   function loadContext() {
@@ -109,11 +162,14 @@ export function openScheduleGenerator() {
       Object.assign(state, { from: draft.from, to: draft.to, fiveDay: draft.fiveDay, variant: draft.variant || 0 });
       if (draft.groups?.length) state.groups = draft.groups;
       state.grid = draft.grid;
+      state.grid2 = draft.secondGrid || null; state.groups2 = draft.secondGroups || []; state.source2 = draft.secondSource || '';
     } else {
+      state.grid2 = null; state.groups2 = []; state.source2 = '';
       state.from = sch?.dates?.[0] || '';
       state.to = sch?.dates?.[sch.dates.length - 1] || '';
       state.grid = null;
     }
+    state.col.aggIdx = matchColAgg();
     const hrs = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'час' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'часа' : 'часов'}`;
     const doHours = state.groups.find(g => g.isDo && g.on)?.hours;
     state.comment = getState().scheduleGen?.comment ||
@@ -126,6 +182,7 @@ export function openScheduleGenerator() {
 
   /* ----------------------- шаг 1: параметры ----------------------- */
   function step1() {
+    step = 1;
     const days = schoolDays(state.from, state.to, state.fiveDay);
     const aggSel = h('select', { onChange: (e) => { state.aggId = e.target.value; loadContext(); step1(); } },
       ...aggs.map(a => h('option', { value: a.id, selected: a.id === state.aggId }, a.name + (placeOfAgg(a) && !a.name.includes(placeOfAgg(a)) ? ` · ${placeOfAgg(a)}` : ''))));
@@ -192,7 +249,8 @@ export function openScheduleGenerator() {
           h('h4', { class: 'sg-h', style: { marginTop: '14px' } }, 'Второй педагог'),
           h('label', { class: 'check-pill', style: { display: 'inline-flex' } },
             h('input', { type: 'checkbox', checked: state.second.enabled, style: { width: 'auto', margin: 0 }, onChange: (e) => { state.second.enabled = e.target.checked; step1(); } }),
-            h('span', {}, 'Пустая таблица второго педагога (те же даты и уроки — он заполнит сам)')),
+            h('span', {}, 'Таблица второго педагога (те же даты и уроки)')),
+          state.second.enabled ? colleagueBlock() : null,
           state.second.enabled ? h('div', { class: 'row', style: { marginTop: '10px' } },
             h('label', { class: 'field' }, h('span', {}, 'Направление (педагог)'), txt(state.second, 'direction', 'Робототехника (Петров П.)')),
             h('label', { class: 'field' }, h('span', {}, 'Где в таблице'),
@@ -214,7 +272,7 @@ export function openScheduleGenerator() {
           `Всего ${total} ур. на ${days.length} дн. · вмещается до ${cap}`)),
 
       h('div', { class: 'sg-actions' },
-        draft ? h('button', { type: 'button', class: 'btn', onClick: () => { state.grid = draft.grid; step2(); } }, icon('history', 16), 'Открыть сохранённый вариант') : null,
+        draft ? h('button', { type: 'button', class: 'btn', onClick: () => { state.grid = draft.grid; if (state.second.enabled && !state.grid2 && colShift()) buildSecond(schoolDays(state.from, state.to, state.fiveDay)); step2(); } }, icon('history', 16), 'Открыть сохранённый вариант') : null,
         h('button', {
           type: 'button', class: 'btn primary',
           onClick: () => {
@@ -226,8 +284,35 @@ export function openScheduleGenerator() {
         }, 'Составить расписание', icon('arrowRight', 16))));
   }
 
+  function colleagueBlock() {
+    const c = state.col;
+    const urlIn = h('input', { type: 'url', value: c.url, placeholder: 'https://disk.yandex.ru/d/…', onInput: (e) => { c.url = e.target.value; } });
+    urlIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pullColleague(); } });
+    const aggs2 = c.data?.aggs || [];
+    const sh = colShift();
+    let status;
+    if (c.loading) status = 'Загружаю данные коллеги…';
+    else if (c.err) status = c.err;
+    else if (!c.data) status = 'Ссылку присылает коллега: на странице «Данные» → «Делиться группами с коллегами». Вставляется один раз — дальше данные подтягиваются сами.';
+    else if (c.aggIdx < 0) status = `У коллеги нет агломерации «${placeOf() || aggOf().name}» — выберите вручную или оставьте пустую таблицу.`;
+    else if (!sh) status = `У коллеги нет данных на ${state.shift} заезд — таблица будет пустой.`;
+    else status = `${c.data.direction || 'Коллега'}: ${(sh.groups || []).length} гр., ${(sh.groups || []).reduce((a, g) => a + (Number(g.hours) || 0), 0)} ур. · ` +
+      (sh.draft ? 'возьму его составленное расписание' : 'он ещё не составлял — расставлю его группы сам');
+    return h('div', { class: 'sg-col' },
+      h('label', { class: 'field', style: { marginTop: '10px' } }, h('span', {}, 'Ссылка коллеги (Яндекс.Диск)'),
+        h('div', { style: { display: 'flex', gap: '6px' } }, urlIn,
+          h('button', { type: 'button', class: 'btn sm', disabled: c.loading || null, title: 'Получить группы и расписание коллеги', onClick: () => pullColleague() }, icon('refresh', 14), 'Подтянуть'))),
+      aggs2.length ? h('label', { class: 'field', style: { marginTop: '8px' } }, h('span', {}, 'Агломерация коллеги'),
+        h('select', { onChange: (e) => { c.aggIdx = Number(e.target.value); state.grid2 = null; step1(); } },
+          h('option', { value: '-1', selected: c.aggIdx < 0 }, '— пустая таблица —'),
+          ...aggs2.map((a, i) => h('option', { value: String(i), selected: i === c.aggIdx }, a.name + (a.place && !a.name.includes(a.place) ? ` · ${a.place}` : ''))))) : null,
+      h('p', { class: 'muted' + (c.err ? ' sg-err' : ''), style: { fontSize: '12px', margin: '6px 0 0' } }, status));
+  }
+
   function generate() {
     const days = schoolDays(state.from, state.to, state.fiveDay);
+    if (state.second.enabled && colShift()) buildSecond(days);
+    else if (!state.col.data || state.col.aggIdx < 0) { state.grid2 = null; state.groups2 = []; state.source2 = ''; }
     const r = buildSchedule({ days, groups: state.groups.filter(g => g.on), slotsPerDay: DEFAULT_TIMES.length, variant: state.variant });
     state.grid = r.grid;
     if (r.problems.length) toast(r.problems[0], 'err', 6000);
@@ -238,9 +323,13 @@ export function openScheduleGenerator() {
     const { aggId, shift, from, to, fiveDay, groups, grid, variant } = state;
     const place = placeOf() || '_';
     update(x => {
-      x.scheduleDrafts = { ...(x.scheduleDrafts || {}), [draftKey(aggId, shift)]: { from, to, fiveDay, groups, grid, variant, savedAt: new Date().toISOString() } };
+      x.scheduleDrafts = { ...(x.scheduleDrafts || {}), [draftKey(aggId, shift)]: {
+        from, to, fiveDay, groups, grid, variant, savedAt: new Date().toISOString(),
+        ...(state.grid2 ? { secondGrid: state.grid2, secondGroups: state.groups2, secondSource: state.source2 } : {}),
+      } };
+      const { grid: _g, ...second } = state.second;
       x.scheduleGen = {
-        ...(x.scheduleGen || {}), fiveDay, kv: state.kv, direction: state.direction, comment: state.comment, second: state.second,
+        ...(x.scheduleGen || {}), fiveDay, kv: state.kv, direction: state.direction, comment: state.comment, second,
         schools: { ...(x.scheduleGen?.schools || {}), [place]: { ...state.school } },
       };
     });
@@ -248,39 +337,63 @@ export function openScheduleGenerator() {
 
   /* ----------------------- шаг 2: предпросмотр ----------------------- */
   function step2() {
+    step = 2;
     const days = schoolDays(state.from, state.to, state.fiveDay);
     for (const d of days) if (!state.grid[d]) state.grid[d] = Array(DEFAULT_TIMES.length).fill('');
+    const two = state.second.enabled && state.grid2;
+    if (two) for (const d of days) if (!state.grid2[d]) state.grid2[d] = Array(DEFAULT_TIMES.length).fill('');
     const codes = state.groups.filter(g => g.on).map(g => g.code);
     const placed = countPlaced(Object.fromEntries(days.map(d => [d, state.grid[d]])));
     const issues = checkGrid(Object.fromEntries(days.map(d => [d, state.grid[d]])));
     const bad = new Set(issues.map(i => `${i.date}|${i.code}`));
     const weeks = weeksOf(days, state.fiveDay);
 
-    const cellSel = (d, i) => {
-      const v = state.grid[d][i] || '';
+    const cellSel = (grid, codes, bad, d, i) => {
+      const v = grid[d][i] || '';
       const sel = h('select', {
         class: 'sg-cell' + (v ? ' on' : '') + (bad.has(`${d}|${v}`) ? ' bad' : ''),
         style: v ? `--h:${hue(v)}` : null,
         'aria-label': `${shortDate(d)}, ${i + 1} урок`,
-        onChange: (e) => { state.grid[d][i] = e.target.value; saveDraft(); step2(); },
+        onChange: (e) => { grid[d][i] = e.target.value; saveDraft(); step2(); },
       }, h('option', { value: '' }, '—'), ...codes.map(c => h('option', { value: c, selected: c === v }, c)),
         v && !codes.includes(v) ? h('option', { value: v, selected: true }, v) : null);
       return sel;
     };
 
-    const weekTable = (w) => h('div', { class: 'table-wrap sg-week' }, h('table', { class: 'compact sg-table' },
+    const weekTable = (w, grid = state.grid, cs = codes, bd = bad) => h('div', { class: 'table-wrap sg-week' }, h('table', { class: 'compact sg-table' },
       h('thead', {},
         h('tr', {}, h('th', {}, `${w.no} неделя`), ...w.days.map(d => h('th', { class: d.date ? '' : 'muted' }, d.weekday, h('br'), d.date ? shortDate(d.date) : '—')))),
       h('tbody', {}, ...DEFAULT_TIMES.map((t, i) => h('tr', {},
         h('td', { class: 'sg-time' }, h('b', {}, `${i + 1}.`), ` ${t}`),
-        ...w.days.map(d => h('td', {}, d.date ? cellSel(d.date, i) : null)))))));
+        ...w.days.map(d => h('td', {}, d.date ? cellSel(grid, cs, bd, d.date, i) : null)))))));
 
-    const counters = h('div', { class: 'sg-counters' }, ...state.groups.filter(g => g.on).map(g => {
+    const counterRow = (groups, placed) => h('div', { class: 'sg-counters' }, ...groups.map(g => {
       const n = placed[g.code] || 0;
       const ok = n === Number(g.hours);
       return h('span', { class: 'sg-count' + (ok ? ' ok' : ' warn'), style: `--h:${hue(g.code)}`, title: ok ? 'Часы совпадают' : `Нужно ${g.hours} ч` },
         h('i', {}), h('span', { class: 'mono' }, g.code), h('b', { class: 'mono' }, `${n}/${g.hours}`));
     }));
+    const counters = counterRow(state.groups.filter(g => g.on), placed);
+
+    // блок второго педагога (подтянут по ссылке коллеги) — тоже можно править
+    let secondPart = [];
+    if (two) {
+      const g2 = Object.fromEntries(days.map(d => [d, state.grid2[d]]));
+      const placed2 = countPlaced(g2);
+      const bad2 = new Set(checkGrid(g2).map(i => `${i.date}|${i.code}`));
+      const codes2 = state.groups2.map(g => g.code);
+      // одна и та же группа у обоих педагогов в один урок — подсветить
+      const clash = days.flatMap(d => DEFAULT_TIMES.map((_, i) => (state.grid[d][i] && state.grid[d][i] === state.grid2[d][i] ? `${shortDate(d)}, ${i + 1} ур.` : null))).filter(Boolean);
+      secondPart = [
+        h('h4', { class: 'sg-h', style: { marginTop: '18px' } }, `Второй педагог: ${state.second.direction || 'коллега'}`),
+        h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '0 0 8px' } },
+          state.source2 === 'draft' ? 'Взято его сохранённое расписание на этот заезд.' : 'Коллега ещё не составлял расписание — его группы расставлены автоматически.',
+          ' В Word блок пойдёт ' + (state.second.first ? 'выше' : 'ниже') + ' вашего.'),
+        state.groups2.some(g => g.hours > 0) ? counterRow(state.groups2.filter(g => g.hours > 0), placed2) : null,
+        clash.length ? h('p', { class: 'sg-issues' }, icon('alert', 15), `Одна группа у двух педагогов одновременно: ${clash.slice(0, 4).join(', ')}${clash.length > 4 ? '…' : ''}`) : null,
+        ...weeks.map(w => weekTable(w, state.grid2, codes2, bad2)),
+      ];
+    }
 
     fill(
       h('div', { class: 'sg-toolbar' },
@@ -294,8 +407,10 @@ export function openScheduleGenerator() {
         ? h('p', { class: 'sg-issues' }, icon('alert', 15), issues.slice(0, 4).map(i => `${shortDate(i.date)}: ${i.text}`).join(' · ') + (issues.length > 4 ? ` · и ещё ${issues.length - 4}` : ''))
         : h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '0 0 10px' } },
           'Клетку можно поменять — выберите другую группу или «—». Правки сохраняются сами, к ним можно вернуться позже.' +
-          (state.second.enabled ? ' В Word будет ещё пустой блок второго педагога с теми же датами и уроками.' : '')),
-      ...weeks.map(weekTable));
+          (state.second.enabled && !two ? ' В Word будет ещё пустой блок второго педагога с теми же датами и уроками.' : '')),
+      two ? h('h4', { class: 'sg-h' }, `Мои уроки: ${state.direction || ''}`) : null,
+      ...weeks.map(w => weekTable(w)),
+      ...secondPart);
   }
 
   async function exportDocx() {
@@ -307,7 +422,8 @@ export function openScheduleGenerator() {
       const blob = await buildScheduleDocx({
         school: state.school, kv: state.kv, yearLabel: yearLabel(state.from),
         place: placeTitle(place), shift: state.shift, direction: state.direction,
-        days, fiveDay: state.fiveDay, grid: state.grid, times: DEFAULT_TIMES, comment: state.comment, second: state.second,
+        days, fiveDay: state.fiveDay, grid: state.grid, times: DEFAULT_TIMES, comment: state.comment,
+        second: { ...state.second, grid: state.second.enabled && state.grid2 ? state.grid2 : null },
       });
       download(`Расписание ${place ? place + ' ' : ''}${state.shift} заезд.docx`, blob);
       toast(issues.length ? `Расписание скачано. Обратите внимание: ${issues.length} замечаний` : 'Расписание скачано');
@@ -316,5 +432,7 @@ export function openScheduleGenerator() {
 
   loadContext();
   step1();
+  // ссылка коллеги уже вставлена — освежить его данные в фоне
+  if (state.col.url && state.second.enabled) pullColleague({ quiet: true });
   return dlg;
 }

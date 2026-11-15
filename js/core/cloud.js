@@ -388,3 +388,6 @@ export function initCloud({ onConflict, onRemoteApplied } = {}) {
   if (auth?.token && auth.expiresAt && auth.expiresAt < Date.now()) { write(AUTH_KEY, null); setStatus('off', 'Вход устарел — войдите заново'); return; }
   if (auth?.token) syncNow();
 }
+
+// для «Поделиться с коллегами» (share.js): те же запросы к Диску и сжатие
+export { api as diskApi, pack, unpack, fnv };

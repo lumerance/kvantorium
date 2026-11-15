@@ -61,7 +61,8 @@ function tbl(grid, rows, { borders = true } = {}) {
  * @param {object} o
  *  {school:{name, locality, director}, kv:{title, head}, yearLabel, place, shift,
  *   direction, days, fiveDay, grid, times, comment,
- *   second:{enabled, direction, first} — пустой блок второго педагога}
+ *   second:{enabled, direction, first, grid?} — блок второго педагога
+ *   (grid — его уроки, если подтянуты по ссылке коллеги; иначе пустой)}
  */
 export async function buildScheduleDocx(o) {
   const blocks = [];
@@ -125,7 +126,7 @@ export async function buildScheduleDocx(o) {
       });
     };
     const mine = () => section(o.direction, o.grid);
-    const other = () => section(o.second.direction || 'Направление (Педагог)', null);
+    const other = () => section(o.second.direction || 'Направление (Педагог)', o.second.grid || null);
     if (o.second?.enabled && o.second.first) { other(); mine(); } else { mine(); if (o.second?.enabled) other(); }
     blocks.push(tbl(grid, rows));
     if (wi === weeks.length - 1) {

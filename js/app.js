@@ -3,6 +3,7 @@ import * as trips from './pages/trips.js';
 import * as appearance from './pages/appearance.js';
 import { route, startRouter, repaint } from './core/router.js';
 import { handleRedirect, initCloud } from './core/cloud.js';
+import { initShare } from './core/share.js';
 import { toast } from './core/ui.js';
 import { askConflict } from './core/account.js';
 import { initShell } from './core/shell.js';
@@ -32,6 +33,7 @@ const auth = handleRedirect();
 initShell();
 startRouter();
 initCloud({ onConflict: askConflict, onRemoteApplied: () => { repaint(); toast('Загружены данные из облака'); } });
+initShare();
 if (auth) toast(auth.ok ? 'Вы вошли через Яндекс — данные будут сохраняться на ваш Яндекс.Диск' : `Вход не выполнен: ${auth.error}`, auth.ok ? 'ok' : 'err', 6000);
 
 // телефон: длинные пояснения свёрнуты до двух строк — тап раскрывает

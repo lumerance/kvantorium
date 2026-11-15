@@ -19,6 +19,8 @@ import { go } from '../core/router.js';
 import { openFinishDialog, confirmReopen } from './agglomeration-finish.js';
 import { placeOfAgg } from '../data/places.js';
 import { cloudState, syncNow, accountShort, onCloud } from '../core/cloud.js';
+import { publishShare, unpublishShare } from '../core/share.js';
+import { copyText } from '../core/ui.js';
 import { loginDialog } from '../core/account.js';
 
 const norm = (s) => String(s || '').toLowerCase();
@@ -97,10 +99,37 @@ export function render(root, params = {}) {
 /* ---------------- облачное сохранение ---------------- */
 function cloudCard() {
   const box = h('div', {});
-  const draw = () => box.replaceChildren(cloudCardBody());
+  const draw = () => box.replaceChildren(...[cloudCardBody(), cloudState().signedIn ? shareCard(draw) : null].filter(Boolean));
   draw();
   const off = onCloud(() => { if (box.isConnected) draw(); else off(); });
   return box;
+}
+
+/** «Делиться группами с коллегами»: публичная ссылка для генератора расписания коллеги. */
+let sharing = false;
+function shareCard(redraw) {
+  const sh = getState().share || {};
+  const copy = async () => toast(await copyText(sh.url) ? 'Ссылка скопирована — отправьте её коллеге' : 'Не удалось скопировать');
+  const turn = async (on) => {
+    if (sharing) return;
+    sharing = true; redraw();
+    try {
+      if (on) { await publishShare({ force: true }); toast('Группы опубликованы. Скопируйте ссылку и отправьте коллеге'); }
+      else { await unpublishShare(); toast('Публикация отменена — ссылка больше не работает'); }
+    } catch (e) { console.error(e); toast('Не получилось: ' + e.message, 'err', 6000); }
+    sharing = false; redraw();
+  };
+  return h('div', { class: 'card share-card', style: { marginBottom: '16px' } },
+    h('div', { class: 'share-head' },
+      switchToggle(!!sh.enabled, 'Делиться группами с коллегами', (v) => turn(v), { title: 'Коллега сможет вставить ссылку в генератор расписания' }),
+      sharing ? h('span', { class: 'muted', style: { fontSize: '12.5px' } }, 'Подождите…') : null),
+    h('p', { class: 'muted', style: { margin: '6px 0 0', fontSize: '12.5px' } }, sh.enabled
+      ? `По ссылке видны только коды групп, часы на заезды и ваши составленные расписания — без детей и оценок. Обновляется сама после правок${sh.publishedAt ? ` (последний раз: ${new Date(sh.publishedAt).toLocaleString('ru-RU')})` : ''}.`
+      : 'Коллега вставит вашу ссылку один раз в «Расписание занятий» — и в его Word будет и ваш блок уроков. Публикуются только коды групп, часы и расписания, без детей.'),
+    sh.enabled && sh.url ? h('div', { class: 'share-link' },
+      h('input', { type: 'text', readonly: true, value: sh.url, onFocus: (e) => e.target.select(), 'aria-label': 'Ссылка для коллеги' }),
+      h('button', { class: 'btn sm primary', type: 'button', onClick: copy }, icon('copy', 14), 'Копировать'),
+      h('button', { class: 'btn sm', type: 'button', disabled: sharing || null, title: 'Выложить свежие данные сейчас', onClick: () => turn(true) }, icon('refresh', 14), 'Обновить')) : null);
 }
 
 function cloudCardBody() {
